@@ -22,7 +22,9 @@ settings = get_settings()
 
 import ssl
 import certifi
-ssl._create_default_https_context = ssl._create_unverified_context
+# Only bypass TLS verification when explicitly enabled (see config.DISABLE_SSL_VERIFY).
+if settings.DISABLE_SSL_VERIFY:
+    ssl._create_default_https_context = ssl._create_unverified_context
 
 EXTRACTION_SYSTEM_PROMPT = """
 You are an expert maritime document parser specializing in MARPOL Oil Record Books (ORB) Part I.
@@ -445,16 +447,19 @@ async def extract_with_gemini(storage_path: str) -> list[dict]:
     import io
     import httpx
     
-    _orig_client = httpx.Client.__init__
-    _orig_async = httpx.AsyncClient.__init__
-    def _no_ssl_client(self, *args, **kwargs):
-        kwargs["verify"] = False
-        _orig_client(self, *args, **kwargs)
-    def _no_ssl_async(self, *args, **kwargs):
-        kwargs["verify"] = False
-        _orig_async(self, *args, **kwargs)
-    httpx.Client.__init__ = _no_ssl_client
-    httpx.AsyncClient.__init__ = _no_ssl_async
+    # Only force-disable httpx TLS verification when explicitly enabled (local
+    # SSL-inspecting proxy). On the VM/prod this block is skipped → secure.
+    if settings.DISABLE_SSL_VERIFY:
+        _orig_client = httpx.Client.__init__
+        _orig_async = httpx.AsyncClient.__init__
+        def _no_ssl_client(self, *args, **kwargs):
+            kwargs["verify"] = False
+            _orig_client(self, *args, **kwargs)
+        def _no_ssl_async(self, *args, **kwargs):
+            kwargs["verify"] = False
+            _orig_async(self, *args, **kwargs)
+        httpx.Client.__init__ = _no_ssl_client
+        httpx.AsyncClient.__init__ = _no_ssl_async
 
     client = genai.Client(
         api_key=settings.GEMINI_API_KEY,
@@ -464,10 +469,15 @@ async def extract_with_gemini(storage_path: str) -> list[dict]:
     )
 
     try:
+        # On the VM (Linux), POPPLER_PATH is empty → pdf2image finds pdftoppm on
+        # the system PATH (/usr/bin). On local Windows, set POPPLER_PATH in .env.
+        # Hardcoded local path kept for reference:
+        # poppler_path=r"C:\poppler\poppler-26.02.0\Library\bin"
+        poppler_kwargs = {"poppler_path": settings.POPPLER_PATH} if settings.POPPLER_PATH else {}
         pages = convert_from_path(
             storage_path,
             dpi=200,
-            poppler_path=r"C:\poppler\poppler-26.02.0\Library\bin"
+            **poppler_kwargs,
         )
     except Exception as e:
         logger.error(f"Failed to convert PDF to images: {e}")

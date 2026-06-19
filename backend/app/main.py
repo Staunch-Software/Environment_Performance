@@ -1,7 +1,16 @@
 import ssl
 import os
 import certifi
-ssl._create_default_https_context = ssl._create_unverified_context
+
+from app.config import get_settings
+
+settings = get_settings()
+
+# Only bypass TLS verification when explicitly enabled (local networks behind an
+# SSL-inspecting proxy). Stays off by default on the VM/prod.
+if settings.DISABLE_SSL_VERIFY:
+    ssl._create_default_https_context = ssl._create_unverified_context
+
 os.environ["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] = certifi.where()
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
@@ -26,7 +35,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

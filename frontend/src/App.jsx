@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { SidebarProvider } from './context/SidebarContext';
 import ProtectedRoute from './components/Layout/ProtectedRoute';
 
 import Login from './pages/Login';
@@ -17,6 +18,7 @@ import VesselConfiguration from './pages/admin/VesselConfiguration';
 export default function App() {
   return (
     <AuthProvider>
+      <SidebarProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -36,6 +38,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
+      </SidebarProvider>
     </AuthProvider>
   );
 }
