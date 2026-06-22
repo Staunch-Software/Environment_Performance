@@ -551,11 +551,11 @@ _SIGNATURE_PATTERNS = [
     # "3E; M.SATHIK; 28-DEC-2025"  or  "CE / A.SOLANKI / 04-JAN-2026"
     r"^\s*(CE|3E|2E|1E|4E|ETO|CO|2O|3O|C/E|C/O)\s*[;/,]\s*\S",
     # Standalone line like "Signed by Chief Engineer"
-    r"(?i)sign(ed|ature)",
+    r"sign(ed|ature)",
     # Only a name + date with no numeric content at all
     r"^[A-Z][a-z]+\s+[A-Z][a-z]+\s*[;/,]\s*\d{2}[\-/][A-Z]{3}[\-/]\d{4}\s*$",
 ]
-_SIGNATURE_RE = re.compile("|".join(_SIGNATURE_PATTERNS))
+_SIGNATURE_RE = re.compile("|".join(_SIGNATURE_PATTERNS), re.IGNORECASE)
 
 
 def _is_signature_block(raw_text: str) -> bool:
