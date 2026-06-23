@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # Opt-in TLS verification bypass for local networks behind an SSL-inspecting
     # proxy that breaks certificate validation. MUST stay False on the VM/prod.
-    DISABLE_SSL_VERIFY: bool = True
+    DISABLE_SSL_VERIFY: bool = False
 
 
 @lru_cache
