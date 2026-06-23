@@ -99,7 +99,6 @@ export default function VesselConfiguration() {
     <div>
       <div className="page-header">
         <h2>Vessel Configuration</h2>
-        <button className="btn btn-primary" onClick={() => setShowAddVessel(true)}>+ Add Vessel</button>
       </div>
 
       {loading ? <LoadingSpinner /> : (
@@ -122,6 +121,10 @@ export default function VesselConfiguration() {
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                     {tanks[v.id] ? `${tanks[v.id].filter(t => t.is_active).length} tanks` : '—'}
                   </span>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={(e) => { e.stopPropagation(); setAddTankFor(v.id); setError(''); }}
+                  >+ Add Tank</button>
                   {expanded === v.id
                     ? <ChevronUp size={18} color="var(--text-muted)" />
                     : <ChevronDown size={18} color="var(--text-muted)" />
@@ -131,9 +134,8 @@ export default function VesselConfiguration() {
 
               {expanded === v.id && (
                 <div style={{ padding: '0 1.5rem 1rem', background: '#f8fafc' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <div style={{ marginBottom: '0.75rem' }}>
                     <h4>Tanks</h4>
-                    <button className="btn btn-ghost btn-sm" onClick={() => { setAddTankFor(v.id); setError(''); }}>+ Add Tank</button>
                   </div>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>

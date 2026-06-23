@@ -8,13 +8,16 @@ import Modal from '../components/shared/Modal';
 import Badge from '../components/shared/Badge';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import api from '../api/axios';
+import { useToast } from '../context/ToastContext';
 
 // phase: 'form' | 'uploading' | 'queued'
 const INITIAL_FORM = { vessel_id: '', file: null };
 
 export default function Uploads() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [uploads, setUploads] = useState([]);
+  const prevStatusRef = useRef({});
   const [vessels, setVessels] = useState([]);
   const [vesselFilter, setVesselFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -29,7 +32,20 @@ export default function Uploads() {
     const params = vesselFilter ? `?vessel_id=${vesselFilter}` : '';
     if (!silent) setLoading(true);
     return api.get(`/api/uploads${params}`)
-      .then(r => setUploads(r.data.data || []))
+      .then(r => {
+        const fresh = r.data.data || [];
+        fresh.forEach(u => {
+          const prev = prevStatusRef.current[u.id];
+          if (prev && (prev === 'pending' || prev === 'processing') && u.status === 'completed') {
+            toast({ message: `Extraction complete — ${u.extracted_entries_count} entries found from ${u.original_filename}`, type: 'success' });
+          }
+          if (prev && (prev === 'pending' || prev === 'processing') && u.status === 'error') {
+            toast({ message: `Extraction failed for ${u.original_filename}`, type: 'error' });
+          }
+          prevStatusRef.current[u.id] = u.status;
+        });
+        setUploads(fresh);
+      })
       .finally(() => { if (!silent) setLoading(false); });
   };
 
@@ -104,10 +120,18 @@ export default function Uploads() {
     {
       key: 'status', label: 'Status',
       render: (r) => (
-        <span className="status-cell">
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Badge value={r.status} />
           {(r.status === 'pending' || r.status === 'processing') && (
-            <span className="spinner-inline" title="Extracting…" />
+            <span title="Extracting…" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', color: '#f59e0b' }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%',
+                background: '#f59e0b',
+                display: 'inline-block',
+                animation: 'pulse-dot 1.2s ease-in-out infinite',
+              }} />
+              Extracting
+            </span>
           )}
         </span>
       ),

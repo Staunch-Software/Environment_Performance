@@ -123,7 +123,22 @@ export default function Alerts() {
                       <td style={{ fontSize: '0.85rem' }}>{vessels.find(v => v.id === a.vessel_id)?.name || '—'}</td>
                       <td style={{ fontSize: '0.8rem' }}>{a.alert_type.replace(/_/g, ' ')}</td>
                       <td style={{ maxWidth: 320, fontSize: '0.85rem' }}>{a.message}</td>
-                      <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{new Date(a.created_at).toLocaleDateString()}</td>
+                      <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        {new Date(a.created_at).toLocaleDateString()}
+                        {!a.is_resolved && (() => {
+                          const days = Math.floor((Date.now() - new Date(a.created_at)) / 86400000);
+                          const color = days < 7 ? '#22c55e' : days < 30 ? '#f59e0b' : '#ef4444';
+                          return (
+                            <span style={{
+                              marginLeft: '0.4rem', fontSize: '0.72rem', fontWeight: 700,
+                              color, background: color + '18', borderRadius: 4,
+                              padding: '1px 5px',
+                            }}>
+                              {days === 0 ? 'Today' : `${days}d`}
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td><Badge value={a.is_resolved ? 'Resolved' : 'Open'} type={a.is_resolved ? 'completed' : 'pending'} /></td>
                       <td>
                         {!a.is_resolved && (

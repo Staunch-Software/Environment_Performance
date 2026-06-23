@@ -81,7 +81,15 @@ JSON STRUCTURE — return exactly this:
       "officer_1_rank": "<rank e.g. 3E, CE, 2E, or null>",
       "officer_2_name": "<name or null>",
       "officer_2_rank": "<rank or null>",
-      "quantities": [ ... ],
+      "quantities": [
+        {
+          "qty_type": "<retained|capacity|transferred|disposed|incinerated|evaporated|bunkered|collected>",
+          "qty_value": <number, e.g. 2.8>,
+          "qty_unit": "<m3|t|l — default m3 if not stated>",
+          "from_tank": "<source tank name or null>",
+          "to_tank": "<destination tank name, ONLY for transferred/bunkered, else null>"
+        }
+      ],
       "raw_text": "<complete verbatim text of the entire block including all item lines>",
       "confidence_score": <0.0-1.0>
     }
@@ -700,8 +708,24 @@ async def run_extraction(
                         # ── 5. Post-process quantities
                         seen_qty_keys: set[tuple] = set()
                         for qty_dict in quantities_raw:
-                            qty_type = qty_dict.get("qty_type", "retained")
-                            qty_value = float(qty_dict.get("qty_value") or 0)
+                            qty_type = (
+                                qty_dict.get("qty_type")
+                                or qty_dict.get("type")
+                                or "retained"
+                            )
+                            # Gemini sometimes uses "value", "amount", or "quantity" instead of "qty_value"
+                            raw_val = (
+                                qty_dict.get("qty_value")
+                                if qty_dict.get("qty_value") is not None
+                                else qty_dict.get("value")
+                                if qty_dict.get("value") is not None
+                                else qty_dict.get("amount")
+                                if qty_dict.get("amount") is not None
+                                else qty_dict.get("quantity")
+                            )
+                            if raw_val is None or raw_val == "":
+                                continue
+                            qty_value = float(raw_val)
                             qty_unit = qty_dict.get("qty_unit", "m3")
 
                             # Dedup: skip if same (type, value) already added for this entry

@@ -1,16 +1,40 @@
 import { useState, useEffect } from 'react';
+import { Ship, Upload, AlertTriangle, Clock } from 'lucide-react';
 import Sidebar from '../components/Layout/Sidebar';
 import Header from '../components/Layout/Header';
 import Badge from '../components/shared/Badge';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import api from '../api/axios';
 
-function SummaryCard({ label, value, sub, variant }) {
+function SummaryCard({ label, value, sub, variant, icon: Icon, iconColor, bar }) {
   return (
-    <div className={`summary-card${variant ? ` ${variant}` : ''}`}>
+    <div className={`summary-card${variant ? ` ${variant}` : ''}`} style={{ position: 'relative', overflow: 'hidden' }}>
+      {Icon && (
+        <Icon
+          size={80}
+          style={{
+            position: 'absolute',
+            right: '1rem',
+            bottom: '50%',
+            transform: 'translateY(50%)',
+            opacity: 0.12,
+            color: iconColor || 'var(--primary)',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
       <span className="sc-label">{label}</span>
       <span className="sc-value">{value}</span>
       {sub && <span className="sc-sub">{sub}</span>}
+      {bar && bar.total > 0 && (
+        <div style={{ marginTop: '0.6rem' }}>
+          <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', gap: 2 }}>
+            {bar.critical > 0 && <div style={{ flex: bar.critical, background: '#ef4444', borderRadius: 3, transition: 'flex 0.4s ease' }} title={`${bar.critical} critical`} />}
+            {bar.major > 0 && <div style={{ flex: bar.major, background: '#f97316', borderRadius: 3, transition: 'flex 0.4s ease' }} title={`${bar.major} major`} />}
+            {bar.minor > 0 && <div style={{ flex: bar.minor, background: '#f59e0b', borderRadius: 3, transition: 'flex 0.4s ease' }} title={`${bar.minor} minor`} />}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -51,18 +75,23 @@ export default function Dashboard() {
           {loading ? <LoadingSpinner /> : (
             <>
               <div className="summary-cards">
-                <SummaryCard label="Total Vessels" value={vessels.length} sub="Active vessels" />
-                <SummaryCard label="Uploads This Month" value={uploadsThisMonth.length} />
+                <SummaryCard label="Total Vessels" value={vessels.length} sub="Active vessels" icon={Ship} iconColor="#1F4E79" />
+                <SummaryCard label="Uploads This Month" value={uploadsThisMonth.length} icon={Upload} iconColor="#0ea5e9" />
                 <SummaryCard
                   label="Open Alerts"
                   value={alertSummary?.total || 0}
                   sub={`${alertSummary?.critical || 0} critical · ${alertSummary?.major || 0} major · ${alertSummary?.minor || 0} minor`}
                   variant={alertSummary?.critical > 0 ? 'danger' : alertSummary?.major > 0 ? 'warning' : ''}
+                  icon={AlertTriangle}
+                  iconColor="#f97316"
+                  bar={{ total: alertSummary?.total || 0, critical: alertSummary?.critical || 0, major: alertSummary?.major || 0, minor: alertSummary?.minor || 0 }}
                 />
                 <SummaryCard
                   label="Pending Uploads"
                   value={uploads.filter(u => u.status === 'pending' || u.status === 'processing').length}
                   sub="In queue"
+                  icon={Clock}
+                  iconColor="#8b5cf6"
                 />
               </div>
 

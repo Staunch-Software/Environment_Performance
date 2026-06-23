@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Layout/Sidebar';
 import Header from '../components/Layout/Header';
 import Badge from '../components/shared/Badge';
@@ -39,6 +39,7 @@ const SUMMARY_LABELS = [
 
 export default function UploadDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [upload, setUpload] = useState(null);
   const [entries, setEntries] = useState([]);
   const [alerts, setAlerts] = useState([]);
@@ -100,7 +101,7 @@ export default function UploadDetail() {
   if (loading) return (
     <div className="app-shell">
       <Sidebar />
-      <div className="main-content"><Header title="Upload Detail" /><LoadingSpinner /></div>
+      <div className="main-content"><Header title="Upload Detail" backTo="/uploads" /><LoadingSpinner /></div>
     </div>
   );
 
@@ -119,12 +120,83 @@ export default function UploadDetail() {
     <div className="app-shell">
       <Sidebar />
       <div className="main-content">
-        <Header title="Upload Detail" />
+        <Header title="Upload Detail" backTo="/uploads" />
         <div className="page-body">
+
+          {/* ── Breadcrumb ── */}
+          <nav style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1.25rem', fontSize: '0.85rem' }}>
+            <span
+              onClick={() => navigate('/uploads')}
+              style={{ color: 'var(--primary)', fontWeight: 500, cursor: 'pointer' }}
+            >
+              ORB Uploads
+            </span>
+            <span style={{ color: 'var(--text-muted)' }}>/</span>
+            <span style={{ color: 'var(--text-secondary)', fontWeight: 600, maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {upload?.original_filename || 'Detail'}
+            </span>
+          </nav>
 
           {/* ── Upload info card ── */}
           {upload && (
             <div className="card" style={{ marginBottom: '1.5rem' }}>
+
+              {/* Stage stepper */}
+              {(() => {
+                const STEPS = ['Uploaded', 'Processing', 'Extracted', 'Completed'];
+                const stepIndex = upload.status === 'pending' ? 0
+                  : upload.status === 'processing' ? 1
+                  : upload.status === 'error' ? 1
+                  : upload.extracted_entries_count > 0 ? 2 : 1;
+                const activeIndex = upload.status === 'completed' ? 3 : stepIndex;
+                const isError = upload.status === 'error';
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1.5rem', gap: 0 }}>
+                    {STEPS.map((step, i) => {
+                      const done = i < activeIndex;
+                      const active = i === activeIndex;
+                      const failed = isError && i === 1;
+                      const color = failed ? '#ef4444' : done || active ? '#1F4E79' : '#cbd5e1';
+                      const textColor = failed ? '#ef4444' : done || active ? '#1F4E79' : '#94a3b8';
+                      return (
+                        <div key={step} style={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.3rem' }}>
+                            <div style={{
+                              width: 28, height: 28, borderRadius: '50%',
+                              background: done ? '#1F4E79' : active ? (failed ? '#ef4444' : '#1F4E79') : '#e2e8f0',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: '0.75rem', fontWeight: 700,
+                              color: done || active ? '#fff' : '#94a3b8',
+                              boxShadow: active ? `0 0 0 3px ${failed ? '#fecaca' : '#bfdbfe'}` : 'none',
+                              transition: 'all 0.3s ease',
+                              position: 'relative',
+                            }}>
+                              {active && !done && (upload.status === 'processing' || upload.status === 'pending') ? (
+                                <span style={{
+                                  width: 10, height: 10, borderRadius: '50%',
+                                  background: '#fff',
+                                  animation: 'pulse-dot 1.2s ease-in-out infinite',
+                                }} />
+                              ) : done ? '✓' : failed ? '✕' : i + 1}
+                            </div>
+                            <span style={{ fontSize: '0.72rem', fontWeight: active ? 700 : 500, color: textColor, whiteSpace: 'nowrap' }}>
+                              {step}
+                            </span>
+                          </div>
+                          {i < STEPS.length - 1 && (
+                            <div style={{
+                              flex: 1, height: 2, margin: '0 0.25rem', marginBottom: '1rem',
+                              background: i < activeIndex ? '#1F4E79' : '#e2e8f0',
+                              transition: 'background 0.3s ease',
+                            }} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
                   <h2>{upload.original_filename}</h2>

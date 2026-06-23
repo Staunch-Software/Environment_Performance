@@ -5,12 +5,14 @@ import Table from '../components/shared/Table';
 import Modal from '../components/shared/Modal';
 import Badge from '../components/shared/Badge';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
+import VesselAvatar from '../components/shared/VesselAvatar';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 
 export default function Vessels() {
   const { isAdmin } = useAuth();
   const [vessels, setVessels] = useState([]);
+  const [alertsByVessel, setAlertsByVessel] = useState({});
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', imo_number: '', call_sign: '' });
@@ -19,7 +21,17 @@ export default function Vessels() {
 
   const load = () => {
     setLoading(true);
-    api.get('/api/vessels').then(r => setVessels(r.data.data || [])).finally(() => setLoading(false));
+    Promise.all([
+      api.get('/api/vessels'),
+      api.get('/api/alerts?is_resolved=false'),
+    ]).then(([v, a]) => {
+      setVessels(v.data.data || []);
+      const map = {};
+      (a.data.data || []).forEach(alert => {
+        map[alert.vessel_id] = (map[alert.vessel_id] || 0) + 1;
+      });
+      setAlertsByVessel(map);
+    }).finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
@@ -40,11 +52,33 @@ export default function Vessels() {
   };
 
   const columns = [
-    { key: 'name', label: 'Vessel Name' },
+    {
+      key: 'name', label: 'Vessel Name',
+      render: (r) => (
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <VesselAvatar name={r.name} size={30} />
+          {r.name}
+        </span>
+      ),
+    },
     { key: 'imo_number', label: 'IMO Number' },
     { key: 'call_sign', label: 'Call Sign', render: (r) => r.call_sign || '—' },
     { key: 'is_active', label: 'Status', render: (r) => <Badge value={r.is_active ? 'active' : 'inactive'} /> },
-    { key: 'created_at', label: 'Added', render: (r) => new Date(r.created_at).toLocaleDateString() },
+    {
+      key: 'health', label: 'Open Alerts',
+      render: (r) => {
+        const count = alertsByVessel[r.id] || 0;
+        const color = count === 0 ? '#22c55e' : count <= 2 ? '#f59e0b' : '#ef4444';
+        const label = count === 0 ? 'No alerts' : `${count} open`;
+        return (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color }}>{label}</span>
+          </span>
+        );
+      },
+    },
+    { key: 'created_at', label: 'Created At', render: (r) => new Date(r.created_at).toLocaleDateString() },
   ];
 
   return (

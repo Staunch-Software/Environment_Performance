@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { SidebarProvider } from './context/SidebarContext';
+import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/Layout/ProtectedRoute';
 
 import Login from './pages/Login';
@@ -18,6 +19,7 @@ import VesselConfiguration from './pages/admin/VesselConfiguration';
 export default function App() {
   return (
     <AuthProvider>
+      <ToastProvider>
       <SidebarProvider>
       <BrowserRouter>
         <Routes>
@@ -39,6 +41,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
       </SidebarProvider>
+      </ToastProvider>
     </AuthProvider>
   );
 }

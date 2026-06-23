@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSidebar } from '../../context/SidebarContext';
@@ -5,6 +6,7 @@ import {
   LayoutDashboard, Ship, Upload, FileText, Bell,
   BookOpen, Users, Settings,
 } from 'lucide-react';
+import api from '../../api/axios';
 
 const MAIN_LINKS = [
   { to: '/dashboard',  label: 'Dashboard',   Icon: LayoutDashboard },
@@ -23,6 +25,14 @@ const ADMIN_LINKS = [
 export default function Sidebar() {
   const { isAdmin } = useAuth();
   const { isOpen, close } = useSidebar();
+  const [alertCount, setAlertCount] = useState(0);
+
+  useEffect(() => {
+    const fetch = () => api.get('/api/alerts/summary').then(r => setAlertCount(r.data.data?.total || 0)).catch(() => {});
+    fetch();
+    const id = setInterval(fetch, 30000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <>
@@ -45,6 +55,22 @@ export default function Sidebar() {
             >
               <Icon size={18} className="sidebar-icon" />
               {label}
+              {label === 'Alerts' && alertCount > 0 && (
+                <span style={{
+                  marginLeft: 'auto',
+                  background: '#ef4444',
+                  color: '#fff',
+                  fontSize: '0.68rem',
+                  fontWeight: 700,
+                  borderRadius: '999px',
+                  padding: '1px 7px',
+                  minWidth: '18px',
+                  textAlign: 'center',
+                  lineHeight: '18px',
+                }}>
+                  {alertCount > 99 ? '99+' : alertCount}
+                </span>
+              )}
             </NavLink>
           ))}
 

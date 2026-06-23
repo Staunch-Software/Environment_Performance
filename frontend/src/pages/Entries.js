@@ -96,8 +96,23 @@ export default function Entries() {
                         <td style={{ maxWidth: 280 }}>{e.operation_description}</td>
                         <td>{e.tank_location || '—'}</td>
                         <td style={{ fontSize: '0.8rem' }}>{e.officer_1_name || '—'}</td>
-                        <td style={{ color: e.confidence_score < 0.75 ? 'var(--danger)' : 'var(--success)', fontWeight: 600 }}>
-                          {e.confidence_score != null ? (e.confidence_score * 100).toFixed(0) + '%' : '—'}
+                        <td>
+                          {e.confidence_score != null ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <div style={{ width: 56, height: 6, borderRadius: 3, background: '#e5e7eb', overflow: 'hidden', flexShrink: 0 }}>
+                                <div style={{
+                                  width: `${e.confidence_score * 100}%`,
+                                  height: '100%',
+                                  borderRadius: 3,
+                                  background: e.confidence_score >= 0.9 ? '#22c55e' : e.confidence_score >= 0.75 ? '#f59e0b' : '#ef4444',
+                                  transition: 'width 0.4s ease',
+                                }} />
+                              </div>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: e.confidence_score >= 0.9 ? '#22c55e' : e.confidence_score >= 0.75 ? '#f59e0b' : '#ef4444' }}>
+                                {(e.confidence_score * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                          ) : '—'}
                         </td>
                       </tr>
                       {expanded === e.id && (
