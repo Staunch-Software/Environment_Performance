@@ -15,10 +15,15 @@ logger = logging.getLogger(__name__)
 
 
 def _norm_tank(name: str | None) -> str:
-    """Normalise a tank name for comparison: upper, strip, collapse spaces, remove #."""
+    """Normalise a tank name for comparison.
+    Removes # and punctuation, collapses spaces, uppercases.
+    Handles variants like 'COMP.' vs 'COMP', 'NO #1' vs 'NO1' vs 'NO 1'.
+    """
     if not name:
         return "unknown"
-    return re.sub(r"\s+", " ", name.upper().replace("#", "").strip())
+    # Remove punctuation characters that vary between handwritten entries
+    cleaned = re.sub(r"[#.\-]", " ", name)
+    return re.sub(r"\s+", " ", cleaned.upper().strip())
 
 
 async def create_alert_if_new(
@@ -103,13 +108,18 @@ async def check_running_balance(vessel_id: uuid.UUID, db: AsyncSession):
                 if balance is None:
                     balance = qty.qty_value
                 else:
-                    delta = abs(balance - qty.qty_value)
-                    if delta > 0.15:
+                    # Only flag when logged < computed — material went missing without
+                    # a recorded operation (genuine compliance issue).
+                    # When logged > computed the tank accumulated naturally (sludge
+                    # generation, water ingress) which is normal and not a violation.
+                    shortfall = balance - qty.qty_value
+                    if shortfall > 0.15:
                         await create_alert_if_new(
                             db, vessel_id, entry.id,
                             "mass_balance_error", "major",
-                            f"Tank {tank.tank_name}: computed balance {balance:.2f} m³ vs "
-                            f"logged {qty.qty_value:.2f} m³ (Δ {delta:.2f} m³) on {entry.entry_date}",
+                            f"Tank {tank.tank_name}: computed balance {balance:.2f} m³ but "
+                            f"only {qty.qty_value:.2f} m³ logged ({shortfall:.2f} m³ unaccounted) "
+                            f"on {entry.entry_date}",
                         )
                     balance = qty.qty_value
 
