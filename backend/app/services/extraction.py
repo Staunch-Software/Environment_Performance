@@ -491,30 +491,34 @@ async def extract_with_gemini(storage_path: str) -> list[dict]:
         logger.error(f"Failed to convert PDF to images: {e}")
         return []
 
+    def _call_gemini(page_image, page_num):
+        buf = io.BytesIO()
+        page_image.save(buf, format="PNG")
+        buf.seek(0)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                types.Part.from_bytes(
+                    data=buf.getvalue(),
+                    mime_type="image/png",
+                ),
+                f"{EXTRACTION_SYSTEM_PROMPT}\n\nExtract all ORB entries from page {page_num}.",
+            ],
+            config=types.GenerateContentConfig(
+                max_output_tokens=8192,
+                temperature=0.1,
+                response_mime_type="application/json",
+            ),
+        )
+        return response.text.strip()
+
     all_entries = []
     for page_num, page_image in enumerate(pages, 1):
         try:
-            buf = io.BytesIO()
-            page_image.save(buf, format="PNG")
-            buf.seek(0)
-
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[
-                    types.Part.from_bytes(
-                        data=buf.getvalue(),
-                        mime_type="image/png",
-                    ),
-                    f"{EXTRACTION_SYSTEM_PROMPT}\n\nExtract all ORB entries from page {page_num}.",
-                ],
-                config=types.GenerateContentConfig(
-                    max_output_tokens=8192,
-                    temperature=0.1,
-                    response_mime_type="application/json",
-                ),
-            )
-
-            raw_json = response.text.strip()
+            # Run the synchronous Gemini call in a thread so the event loop
+            # stays responsive and gunicorn heartbeats keep flowing.
+            import asyncio
+            raw_json = await asyncio.to_thread(_call_gemini, page_image, page_num)
 
             # Clean markdown if present
             if "```" in raw_json:
