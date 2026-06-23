@@ -14,6 +14,13 @@ from app.models.vessel_tank import VesselTank
 logger = logging.getLogger(__name__)
 
 
+def _norm_tank(name: str | None) -> str:
+    """Normalise a tank name for comparison: upper, strip, collapse spaces, remove #."""
+    if not name:
+        return "unknown"
+    return re.sub(r"\s+", " ", name.upper().replace("#", "").strip())
+
+
 async def create_alert_if_new(
     db: AsyncSession,
     vessel_id: uuid.UUID,
@@ -88,8 +95,11 @@ async def check_running_balance(vessel_id: uuid.UUID, db: AsyncSession):
         balance = None
         prev_retained = None
 
+        tn = _norm_tank(tank.tank_name)
         for entry, qty in rows:
-            if qty.qty_type == "retained" and (qty.from_tank == tank.tank_name or qty.to_tank == tank.tank_name):
+            if qty.qty_type == "retained" and (
+                _norm_tank(qty.from_tank) == tn or _norm_tank(qty.to_tank) == tn
+            ):
                 if balance is None:
                     balance = qty.qty_value
                 else:
@@ -105,11 +115,11 @@ async def check_running_balance(vessel_id: uuid.UUID, db: AsyncSession):
 
             elif qty.qty_type == "transferred":
                 if balance is not None:
-                    if qty.to_tank == tank.tank_name:
+                    if _norm_tank(qty.to_tank) == tn:
                         balance += qty.qty_value
-                    elif qty.from_tank == tank.tank_name:
+                    elif _norm_tank(qty.from_tank) == tn:
                         balance -= qty.qty_value
-            elif qty.qty_type in ("disposed", "evaporated") and qty.from_tank == tank.tank_name:
+            elif qty.qty_type in ("disposed", "evaporated") and _norm_tank(qty.from_tank) == tn:
                 if balance is not None:
                     balance -= qty.qty_value
 
@@ -129,6 +139,8 @@ async def check_individual_tank_capacity(vessel_id: uuid.UUID, db: AsyncSession)
                 OrbEntry.vessel_id == vessel_id,
                 OrbEntryQuantity.qty_type == "retained",
                 or_(
+                    OrbEntryQuantity.from_tank.ilike(tank.tank_name.replace("#", "").strip()),
+                    OrbEntryQuantity.to_tank.ilike(tank.tank_name.replace("#", "").strip()),
                     OrbEntryQuantity.from_tank == tank.tank_name,
                     OrbEntryQuantity.to_tank == tank.tank_name,
                 ),
@@ -206,7 +218,7 @@ async def check_overdue_sounding(vessel_id: uuid.UUID, db: AsyncSession):
 
     by_tank: dict[str, list] = {}
     for entry in entries:
-        key = entry.tank_location or "unknown"
+        key = _norm_tank(entry.tank_location)
         by_tank.setdefault(key, []).append(entry)
 
     for tank_name, tank_entries in by_tank.items():
