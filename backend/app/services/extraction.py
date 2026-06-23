@@ -502,9 +502,10 @@ async def extract_with_gemini(storage_path: str) -> list[dict]:
                     data=buf.getvalue(),
                     mime_type="image/png",
                 ),
-                f"{EXTRACTION_SYSTEM_PROMPT}\n\nExtract all ORB entries from page {page_num}.",
+                f"Extract all ORB entries from page {page_num}.",
             ],
             config=types.GenerateContentConfig(
+                system_instruction=EXTRACTION_SYSTEM_PROMPT,
                 max_output_tokens=8192,
                 temperature=0.1,
                 response_mime_type="application/json",
