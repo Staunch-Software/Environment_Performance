@@ -20,6 +20,7 @@ export default function Alerts() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ vessel_id: '', severity: '', is_resolved: '', alert_type: '' });
   const [resolving, setResolving] = useState(null);
+  const [recalculating, setRecalculating] = useState(false);
 
   useEffect(() => { api.get('/api/vessels').then(r => setVessels(r.data.data || [])); }, []);
 
@@ -44,6 +45,17 @@ export default function Alerts() {
     await api.patch(`/api/alerts/${resolving}/resolve`, { notes: '' });
     setResolving(null);
     load();
+  };
+
+  const handleRecalculate = async () => {
+    if (!filters.vessel_id) return;
+    setRecalculating(true);
+    try {
+      await api.post(`/api/alerts/recalculate?vessel_id=${filters.vessel_id}`);
+      load();
+    } finally {
+      setRecalculating(false);
+    }
   };
 
   const CHIP_COLORS = {
@@ -102,6 +114,15 @@ export default function Alerts() {
                 </select>
               </div>
               <button className="btn btn-primary" onClick={load} style={{ alignSelf: 'flex-end' }}>Apply</button>
+              <button
+                className="btn btn-secondary"
+                onClick={handleRecalculate}
+                disabled={!filters.vessel_id || recalculating}
+                title={!filters.vessel_id ? 'Select a vessel first' : 'Clear stale alerts and rerun all compliance checks'}
+                style={{ alignSelf: 'flex-end' }}
+              >
+                {recalculating ? 'Recalculating…' : 'Recalculate Alerts'}
+              </button>
             </div>
           </div>
 

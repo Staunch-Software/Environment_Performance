@@ -3,14 +3,16 @@ from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 
 from app.database import get_db
 from app.models.orb_alert import OrbAlert
+from app.models.orb_upload import OrbUpload
 from app.models.user import User
 from app.schemas.orb_alert import AlertResponse, ResolveRequest, AlertSummary
 from app.schemas.common import success
 from app.dependencies import get_current_user
+from app.services.calculations import run_all_checks
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -75,6 +77,37 @@ async def get_alert(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     return success(data=AlertResponse.model_validate(alert).model_dump())
+
+
+@router.post("/recalculate")
+async def recalculate_alerts(
+    vessel_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete all unresolved alerts for a vessel and rerun all compliance checks."""
+    # 1. Delete all unresolved alerts for the vessel
+    deleted = await db.execute(
+        delete(OrbAlert).where(
+            OrbAlert.vessel_id == vessel_id,
+            OrbAlert.is_resolved == False,
+        )
+    )
+    await db.flush()
+
+    # 2. Re-run checks for every completed upload belonging to this vessel
+    uploads_result = await db.execute(
+        select(OrbUpload).where(
+            OrbUpload.vessel_id == vessel_id,
+            OrbUpload.status == "completed",
+        )
+    )
+    uploads = uploads_result.scalars().all()
+
+    for upload in uploads:
+        await run_all_checks(vessel_id, upload.id, db)
+
+    return success(message=f"Recalculated alerts for vessel. Cleared {deleted.rowcount} stale alerts, processed {len(uploads)} upload(s).")
 
 
 @router.patch("/{alert_id}/resolve")
