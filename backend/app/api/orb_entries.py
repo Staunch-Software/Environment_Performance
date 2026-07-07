@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/entries", tags=["entries"])
 
 @router.get("")
 async def list_entries(
-    vessel_id: Optional[uuid.UUID] = None,
+    vessel_id: Optional[List[uuid.UUID]] = Query(None),
     upload_id: Optional[uuid.UUID] = None,
     orb_code: Optional[str] = None,
     date_from: Optional[date] = None,
@@ -29,7 +29,7 @@ async def list_entries(
 ):
     q = select(OrbEntry).order_by(OrbEntry.entry_date.desc())
     if vessel_id:
-        q = q.where(OrbEntry.vessel_id == vessel_id)
+        q = q.where(OrbEntry.vessel_id.in_(vessel_id))
     if upload_id:
         q = q.where(OrbEntry.upload_id == upload_id)
     if orb_code:

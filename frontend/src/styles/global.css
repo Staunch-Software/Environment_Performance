@@ -61,8 +61,7 @@ button { cursor: pointer; font-family: inherit; }
 }
 
 /* Filter bar — button aligns flush with input bottom, no label gap */
-.filters-bar .form-group { margin-bottom: 0; }
-.filters-bar .btn { align-self: flex-end; }
+.filters-bar .form-group { margin-bottom: 0; flex: 1 1 0; min-width: 0; }
 
 /* Cards */
 .card {
@@ -82,14 +81,17 @@ button { cursor: pointer; font-family: inherit; }
 
 .page-header h1 { font-size: 1.5rem; }
 
-/* Filters bar */
+/* Filters bar — flex with flex-basis:0 + min-width:0 forces every field to the
+   same width regardless of its content (native date inputs etc. can't force
+   their column wider), and keeps gaps/heights identical across all children. */
 .filters-bar {
   display: flex;
-  gap: 1rem;
   flex-wrap: wrap;
+  gap: 1rem;
   margin-bottom: 1rem;
   align-items: flex-end;
 }
+.filters-bar .btn { flex: 0 0 auto; height: 38px; box-sizing: border-box; }
 
 /* Empty state */
 .empty-state {

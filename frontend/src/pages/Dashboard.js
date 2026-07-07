@@ -1,14 +1,22 @@
 import { useState, useEffect } from 'react';
-import { Ship, Upload, AlertTriangle, Clock } from 'lucide-react';
+import { Ship, Upload, AlertTriangle, Anchor, Droplets, X } from 'lucide-react';
 import Sidebar from '../components/Layout/Sidebar';
 import Header from '../components/Layout/Header';
 import Badge from '../components/shared/Badge';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import api from '../api/axios';
 
-function SummaryCard({ label, value, sub, variant, icon: Icon, iconColor, bar }) {
+function SummaryCard({ label, value, sub, variant, icon: Icon, iconColor, bar, onClick, active }) {
   return (
-    <div className={`summary-card${variant ? ` ${variant}` : ''}`} style={{ position: 'relative', overflow: 'hidden' }}>
+    <div
+      className={`summary-card${variant ? ` ${variant}` : ''}`}
+      onClick={onClick}
+      style={{
+        position: 'relative', overflow: 'hidden',
+        cursor: onClick ? 'pointer' : undefined,
+        border: active ? '2px solid var(--primary)' : undefined,
+      }}
+    >
       {Icon && (
         <Icon
           size={80}
@@ -45,6 +53,37 @@ export default function Dashboard() {
   const [alertSummary, setAlertSummary] = useState(null);
   const [recentAlerts, setRecentAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showPlainVesselList, setShowPlainVesselList] = useState(false);
+  const [showConfiguredList, setShowConfiguredList] = useState(false);
+  const [tankPanelVessel, setTankPanelVessel] = useState(null); // vessel object or null
+  const [tankCache, setTankCache] = useState({}); // vessel_id -> grouped tank data
+  const [tankLoading, setTankLoading] = useState(false);
+  const [vesselTankCounts, setVesselTankCounts] = useState({}); // vessel_id -> tank count
+
+  const openPlainVesselList = () => {
+    setShowPlainVesselList(v => !v);
+    setShowConfiguredList(false);
+    setTankPanelVessel(null);
+  };
+
+  const openConfiguredList = () => {
+    setShowConfiguredList(v => !v);
+    setShowPlainVesselList(false);
+    setTankPanelVessel(null);
+  };
+
+  const openTankPanel = async (vessel) => {
+    setTankPanelVessel(vessel);
+    if (!tankCache[vessel.id]) {
+      setTankLoading(true);
+      try {
+        const r = await api.get(`/api/vessels/${vessel.id}/tanks?grouped=true`);
+        setTankCache(c => ({ ...c, [vessel.id]: r.data.data || [] }));
+      } finally {
+        setTankLoading(false);
+      }
+    }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -53,12 +92,25 @@ export default function Dashboard() {
       api.get('/api/alerts/summary'),
       api.get('/api/alerts?is_resolved=false'),
     ]).then(([v, u, as, ra]) => {
-      setVessels(v.data.data || []);
+      const vesselList = v.data.data || [];
+      setVessels(vesselList);
       setUploads(u.data.data || []);
       setAlertSummary(as.data.data || {});
       setRecentAlerts((ra.data.data || []).slice(0, 5));
+
+      Promise.all(vesselList.map(vessel => api.get(`/api/vessels/${vessel.id}/tanks`)))
+        .then(results => {
+          const counts = {};
+          vesselList.forEach((vessel, idx) => {
+            counts[vessel.id] = (results[idx].data.data || []).length;
+          });
+          setVesselTankCounts(counts);
+        })
+        .catch(console.error);
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
+
+  const configuredVesselCount = vessels.filter(v => (vesselTankCounts[v.id] || 0) > 0).length;
 
   const now = new Date();
   const uploadsThisMonth = uploads.filter((u) => {
@@ -75,7 +127,24 @@ export default function Dashboard() {
           {loading ? <LoadingSpinner /> : (
             <>
               <div className="summary-cards">
-                <SummaryCard label="Total Vessels" value={vessels.length} sub="Active vessels" icon={Ship} iconColor="#1F4E79" />
+                <SummaryCard
+                  label="Total Vessels"
+                  value={vessels.length}
+                  sub="Active vessels"
+                  icon={Ship}
+                  iconColor="#1F4E79"
+                  onClick={openPlainVesselList}
+                  active={showPlainVesselList}
+                />
+                <SummaryCard
+                  label="Configured Vessels"
+                  value={configuredVesselCount}
+                  sub={`of ${vessels.length} have tanks set up`}
+                  icon={Droplets}
+                  iconColor="#0ea58c"
+                  onClick={openConfiguredList}
+                  active={showConfiguredList}
+                />
                 <SummaryCard label="Uploads This Month" value={uploadsThisMonth.length} icon={Upload} iconColor="#0ea5e9" />
                 <SummaryCard
                   label="Open Alerts"
@@ -86,15 +155,88 @@ export default function Dashboard() {
                   iconColor="#f97316"
                   bar={{ total: alertSummary?.total || 0, critical: alertSummary?.critical || 0, major: alertSummary?.major || 0, minor: alertSummary?.minor || 0 }}
                 />
-                <SummaryCard
-                  label="Pending Uploads"
-                  value={uploads.filter(u => u.status === 'pending' || u.status === 'processing').length}
-                  sub="In queue"
-                  icon={Clock}
-                  iconColor="#8b5cf6"
-                />
               </div>
 
+              {showPlainVesselList ? (
+                <div className="card">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                    <h3 style={{ margin: 0 }}>Total Vessels</h3>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setShowPlainVesselList(false)}>
+                      ← Back to overview
+                    </button>
+                  </div>
+
+                  {vessels.length === 0 ? (
+                    <div className="empty-state">No vessels configured.</div>
+                  ) : (
+                    <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ textAlign: 'left', padding: '0.5rem', fontSize: '0.75rem', color: '#fff', position: 'sticky', top: 0, background: '#1F4E79' }}>S.No</th>
+                            <th style={{ textAlign: 'left', padding: '0.5rem', fontSize: '0.75rem', color: '#fff', position: 'sticky', top: 0, background: '#1F4E79' }}>Vessel Name</th>
+                            <th style={{ textAlign: 'left', padding: '0.5rem', fontSize: '0.75rem', color: '#fff', position: 'sticky', top: 0, background: '#1F4E79' }}>IMO Number</th>
+                            <th style={{ textAlign: 'left', padding: '0.5rem', fontSize: '0.75rem', color: '#fff', position: 'sticky', top: 0, background: '#1F4E79' }}>Call Sign</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {vessels.map((v, idx) => (
+                            <tr key={v.id}>
+                              <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>{idx + 1}</td>
+                              <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>{v.name}</td>
+                              <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>{v.imo_number}</td>
+                              <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>{v.call_sign || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ) : showConfiguredList ? (
+                <div className="card">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                    <h3 style={{ margin: 0 }}>Configured Vessels</h3>
+                    <button className="btn btn-ghost btn-sm" onClick={() => { setShowConfiguredList(false); setTankPanelVessel(null); }}>
+                      ← Back to overview
+                    </button>
+                  </div>
+
+                  {vessels.length === 0 ? (
+                    <div className="empty-state">No vessels configured.</div>
+                  ) : (
+                    <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ textAlign: 'left', padding: '0.5rem', fontSize: '0.75rem', color: '#fff', position: 'sticky', top: 0, background: '#1F4E79' }}>S.No</th>
+                            <th style={{ textAlign: 'left', padding: '0.5rem', fontSize: '0.75rem', color: '#fff', position: 'sticky', top: 0, background: '#1F4E79' }}>Vessel Name</th>
+                            <th style={{ textAlign: 'left', padding: '0.5rem', fontSize: '0.75rem', color: '#fff', position: 'sticky', top: 0, background: '#1F4E79' }}>IMO Number</th>
+                            <th style={{ textAlign: 'left', padding: '0.5rem', fontSize: '0.75rem', color: '#fff', position: 'sticky', top: 0, background: '#1F4E79' }}>Call Sign</th>
+                            <th style={{ textAlign: 'right', padding: '0.5rem', fontSize: '0.75rem', color: '#fff', position: 'sticky', top: 0, background: '#1F4E79' }}>Tanks</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {vessels.map((v, idx) => (
+                            <tr key={v.id}>
+                              <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>{idx + 1}</td>
+                              <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>{v.name}</td>
+                              <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>{v.imo_number}</td>
+                              <td style={{ padding: '0.5rem', fontSize: '0.85rem' }}>{v.call_sign || '—'}</td>
+                              <td style={{ padding: '0.5rem', textAlign: 'right' }}>
+                                <button className="btn btn-ghost btn-sm" onClick={() => openTankPanel(v)}>
+                                  <Droplets size={13} style={{ marginRight: '0.3rem' }} />
+                                  View Tanks
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ) : (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                 <div className="card">
                   <h3 style={{ marginBottom: '1rem' }}>Recent Uploads</h3>
@@ -152,10 +294,62 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
+              )}
             </>
           )}
         </div>
       </div>
+
+      {tankPanelVessel && (
+        <>
+          <div className="tank-panel-backdrop" onClick={() => setTankPanelVessel(null)} />
+          <div className="tank-panel">
+            <div className="tank-panel__header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <Ship size={20} />
+                <div>
+                  <h3 style={{ margin: 0 }}>{tankPanelVessel.name}</h3>
+                  <span style={{ fontSize: '0.78rem', opacity: 0.85 }}>
+                    IMO {tankPanelVessel.imo_number} · Call Sign {tankPanelVessel.call_sign || '—'}
+                  </span>
+                </div>
+              </div>
+              <button className="btn-icon tank-panel__close" onClick={() => setTankPanelVessel(null)} aria-label="Close">
+                <X size={18} />
+              </button>
+            </div>
+            {!tankLoading && (tankCache[tankPanelVessel.id] || []).length > 0 && (
+              <div className="tank-panel__summary">
+                <span><strong>{tankCache[tankPanelVessel.id].reduce((s, g) => s + g.tanks.length, 0)}</strong> tanks</span>
+                <span><strong>{tankCache[tankPanelVessel.id].reduce((s, g) => s + g.total_capacity_m3, 0).toFixed(1)}</strong> m³ total capacity</span>
+              </div>
+            )}
+            <div className="tank-panel__body">
+              {tankLoading ? <LoadingSpinner /> : (
+                (tankCache[tankPanelVessel.id] || []).length === 0 ? (
+                  <div className="empty-state">No tanks configured for this vessel.</div>
+                ) : (
+                  tankCache[tankPanelVessel.id].map(group => (
+                    <div key={group.group} className="tank-panel__group">
+                      <div className="tank-panel__group-header">
+                        <Anchor size={13} />
+                        <span>{group.group}</span>
+                        <span className="tank-panel__group-total">{group.total_capacity_m3.toFixed(1)} m³</span>
+                      </div>
+                      {group.tanks.map(t => (
+                        <div key={t.id} className="tank-panel__row">
+                          <span className="tank-panel__name">{t.tank_name}</span>
+                          <span className="tank-panel__capacity">{t.capacity_m3} m³</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                )
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

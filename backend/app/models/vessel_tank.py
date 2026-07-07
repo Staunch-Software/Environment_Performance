@@ -19,3 +19,5 @@ class VesselTank(Base, TimestampMixin):
     is_iopp: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_evaporation_allowed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    iopp_doc1_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    iopp_doc2_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)

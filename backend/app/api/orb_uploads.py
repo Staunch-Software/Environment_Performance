@@ -1,7 +1,8 @@
 import uuid
 import os
 import hashlib
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -24,13 +25,13 @@ settings = get_settings()
 
 @router.get("")
 async def list_uploads(
-    vessel_id: uuid.UUID = None,
+    vessel_id: Optional[List[uuid.UUID]] = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     q = select(OrbUpload).order_by(OrbUpload.created_at.desc()).limit(50)
     if vessel_id:
-        q = q.where(OrbUpload.vessel_id == vessel_id)
+        q = q.where(OrbUpload.vessel_id.in_(vessel_id))
     result = await db.execute(q)
     uploads = result.scalars().all()
     return success(data=[UploadResponse.model_validate(u).model_dump() for u in uploads])

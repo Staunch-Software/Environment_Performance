@@ -7,6 +7,8 @@ import Table from '../components/shared/Table';
 import Modal from '../components/shared/Modal';
 import Badge from '../components/shared/Badge';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
+import Dropdown from '../components/shared/Dropdown';
+import MultiSelectDropdown from '../components/shared/MultiSelectDropdown';
 import api from '../api/axios';
 import { useToast } from '../context/ToastContext';
 
@@ -19,7 +21,7 @@ export default function Uploads() {
   const [uploads, setUploads] = useState([]);
   const prevStatusRef = useRef({});
   const [vessels, setVessels] = useState([]);
-  const [vesselFilter, setVesselFilter] = useState('');
+  const [vesselFilter, setVesselFilter] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
@@ -29,9 +31,10 @@ export default function Uploads() {
   const fileRef = useRef();
 
   const load = (silent = false) => {
-    const params = vesselFilter ? `?vessel_id=${vesselFilter}` : '';
+    const params = new URLSearchParams();
+    vesselFilter.forEach(id => params.append('vessel_id', id));
     if (!silent) setLoading(true);
-    return api.get(`/api/uploads${params}`)
+    return api.get(`/api/uploads?${params}`)
       .then(r => {
         const fresh = r.data.data || [];
         fresh.forEach(u => {
@@ -191,12 +194,14 @@ export default function Uploads() {
           </div>
 
           <div className="filters-bar">
-            <div className="form-group" style={{ marginBottom: 0 }}>
+            <div className="form-group" style={{ marginBottom: 0, flex: '0 1 320px' }}>
               <label>Filter by Vessel</label>
-              <select className="form-control" value={vesselFilter} onChange={e => setVesselFilter(e.target.value)}>
-                <option value="">All Vessels</option>
-                {vessels.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
+              <MultiSelectDropdown
+                value={vesselFilter}
+                onChange={v => setVesselFilter(v)}
+                placeholder="Select the vessel"
+                options={vessels.map(v => ({ value: v.id, label: v.name }))}
+              />
             </div>
           </div>
 
@@ -229,14 +234,12 @@ export default function Uploads() {
               {error && <div className="alert-banner error">{error}</div>}
               <div className="form-group">
                 <label>Vessel *</label>
-                <select
-                  className="form-control"
+                <Dropdown
                   value={form.vessel_id}
-                  onChange={e => setForm({ ...form, vessel_id: e.target.value })}
-                >
-                  <option value="">Select vessel…</option>
-                  {vessels.map(v => <option key={v.id} value={v.id}>{v.name} ({v.imo_number})</option>)}
-                </select>
+                  onChange={v => setForm({ ...form, vessel_id: v })}
+                  placeholder="Select vessel…"
+                  options={vessels.map(v => ({ value: v.id, label: `${v.name} (${v.imo_number})` }))}
+                />
               </div>
               <div className="form-group">
                 <label>PDF File *</label>

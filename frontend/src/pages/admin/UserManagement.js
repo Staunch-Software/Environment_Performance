@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Modal from '../../components/shared/Modal';
 import Badge from '../../components/shared/Badge';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
+import Dropdown from '../../components/shared/Dropdown';
 import api from '../../api/axios';
 
 export default function UserManagement() {
@@ -109,9 +110,11 @@ export default function UserManagement() {
           <div className="form-group"><label>Email *</label><input type="email" className="form-control" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
           <div className="form-group"><label>Password *</label><input type="password" className="form-control" value={form.password} onChange={e => setForm({...form, password: e.target.value})} /></div>
           <div className="form-group"><label>Role</label>
-            <select className="form-control" value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
-              <option value="viewer">Viewer</option><option value="admin">Admin</option>
-            </select>
+            <Dropdown
+              value={form.role}
+              onChange={v => setForm({ ...form, role: v })}
+              options={[{ value: 'viewer', label: 'Viewer' }, { value: 'admin', label: 'Admin' }]}
+            />
           </div>
         </Modal>
       )}
@@ -127,9 +130,11 @@ export default function UserManagement() {
           <div className="form-group"><label>Full Name</label><input className="form-control" value={editUser.name} onChange={e => setEditUser({...editUser, name: e.target.value})} /></div>
           <div className="form-group"><label>Email</label><input type="email" className="form-control" value={editUser.email} onChange={e => setEditUser({...editUser, email: e.target.value})} /></div>
           <div className="form-group"><label>Role</label>
-            <select className="form-control" value={editUser.role} onChange={e => setEditUser({...editUser, role: e.target.value})}>
-              <option value="viewer">Viewer</option><option value="admin">Admin</option>
-            </select>
+            <Dropdown
+              value={editUser.role}
+              onChange={v => setEditUser({ ...editUser, role: v })}
+              options={[{ value: 'viewer', label: 'Viewer' }, { value: 'admin', label: 'Admin' }]}
+            />
           </div>
         </Modal>
       )}

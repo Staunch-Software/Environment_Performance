@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import Sidebar from '../components/Layout/Sidebar';
 import Header from '../components/Layout/Header';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
+import Dropdown from '../components/shared/Dropdown';
 import api from '../api/axios';
 
 const DAILY_COLS = [
@@ -35,6 +36,12 @@ const SUMMARY_COLS = [
   { key: 'pending_defect',            label: 'Pending defect, if any' },
 ];
 
+function pctBand(pct) {
+  if (pct >= 85) return 'high';
+  if (pct >= 60) return 'mid';
+  return 'low';
+}
+
 function TankCell({ items, capacities = {} }) {
   if (!items || items.length === 0) return <span className="text-muted">—</span>;
   return (
@@ -46,7 +53,7 @@ function TankCell({ items, capacities = {} }) {
           <div key={i} className="tank-cell__row">
             <span className="tank-cell__name">{item.tank_name}</span>
             <span className="tank-cell__value">{item.value} m³</span>
-            {pct !== null && <span className="tank-cell__pct">{pct}%</span>}
+            {pct !== null && <span className={`tank-cell__pct tank-cell__pct--${pctBand(pct)}`}>{pct}%</span>}
           </div>
         );
       })}
@@ -69,8 +76,53 @@ function renderDailyCell(col, row, capacities) {
   return <TankCell items={row[col.key]} capacities={capacities} />;
 }
 
+const MONTH_LABEL = (date) =>
+  date.toLocaleString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
+
+function ModeToggle({ mode, onChange }) {
+  return (
+    <div className="month-filter-toggle">
+      <button
+        type="button"
+        className={`month-filter-toggle__btn${mode === 'month' ? ' month-filter-toggle__btn--active' : ''}`}
+        onClick={() => onChange('month')}
+      >
+        Month
+      </button>
+      <button
+        type="button"
+        className={`month-filter-toggle__btn${mode === 'custom' ? ' month-filter-toggle__btn--active' : ''}`}
+        onClick={() => onChange('custom')}
+      >
+        Custom Range
+      </button>
+    </div>
+  );
+}
+
+function MonthStepper({ date, onChange, disabled }) {
+  const shift = (delta) => onChange(new Date(date.getFullYear(), date.getMonth() + delta, 1));
+  return (
+    <div className="month-stepper" style={{ opacity: disabled ? 0.5 : 1 }}>
+      <button type="button" className="month-stepper__arrow" disabled={disabled} onClick={() => shift(-1)} aria-label="Previous month">
+        <ChevronLeft size={16} />
+      </button>
+      <span className="month-stepper__label">{MONTH_LABEL(date)}</span>
+      <button type="button" className="month-stepper__arrow" disabled={disabled} onClick={() => shift(1)} aria-label="Next month">
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  );
+}
+
 export default function DailyLog() {
   const [vessels, setVessels] = useState([]);
+
+  const toDateStr = (d) => d.toISOString().slice(0, 10);
+  const monthRange = (date) => [
+    toDateStr(new Date(date.getFullYear(), date.getMonth(), 1)),
+    toDateStr(new Date(date.getFullYear(), date.getMonth() + 1, 0)),
+  ];
 
   // Daily log filter state (own vessel + date range)
   const [dailyVessel, setDailyVessel] = useState('');
@@ -82,13 +134,21 @@ export default function DailyLog() {
 
   // Monthly summary filter state (own vessel + date range)
   const [summaryVessel,  setSummaryVessel]  = useState('');
+  const [summaryMode,    setSummaryMode]    = useState('month'); // 'month' | 'custom'
+  const [summaryMonth,   setSummaryMonth]   = useState(new Date());
   const [summaryFrom,    setSummaryFrom]    = useState('');
   const [summaryTo,      setSummaryTo]      = useState('');
   const [summaryData,    setSummaryData]    = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError,   setSummaryError]   = useState('');
 
-  const toDateStr = (d) => d.toISOString().slice(0, 10);
+  const handleSummaryMonthChange = (date) => {
+    setSummaryMonth(date);
+    const [from, to] = monthRange(date);
+    setSummaryFrom(from);
+    setSummaryTo(to);
+    setSummaryData(null);
+  };
 
   useEffect(() => {
     api.get('/api/vessels').then(r => {
@@ -97,8 +157,8 @@ export default function DailyLog() {
 
       const today = new Date();
       const todayStr = toDateStr(today);
-      const from7  = toDateStr(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7));
-      const from30 = toDateStr(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 30));
+      const from7 = toDateStr(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7));
+      const [monthFrom, monthTo] = monthRange(today);
 
       // Default vessel = AM UMANG (case-insensitive), else first vessel
       const defaultVessel = list.find(v => v.name.toUpperCase().includes('AM UMANG')) || list[0];
@@ -108,13 +168,14 @@ export default function DailyLog() {
       setSummaryVessel(vid);
       setDailyFrom(from7);
       setDailyTo(todayStr);
-      setSummaryFrom(from30);
-      setSummaryTo(todayStr);
+      setSummaryMonth(today);
+      setSummaryFrom(monthFrom);
+      setSummaryTo(monthTo);
 
       // Auto-load immediately with the resolved values (state isn't flushed yet)
       if (vid) {
         loadDailyLog(vid, from7, todayStr);
-        loadSummary(vid, from30, todayStr);
+        loadSummary(vid, monthFrom, monthTo);
       }
     });
   }, []);
@@ -173,14 +234,12 @@ export default function DailyLog() {
               <div className="filters-bar">
                 <div className="form-group">
                   <label>Vessel</label>
-                  <select
-                    className="form-control"
+                  <Dropdown
                     value={dailyVessel}
-                    onChange={e => { setDailyVessel(e.target.value); setLogData(null); }}
-                  >
-                    <option value="">— Select Vessel —</option>
-                    {vessels.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                  </select>
+                    onChange={v => { setDailyVessel(v); setLogData(null); }}
+                    placeholder="— Select Vessel —"
+                    options={vessels.map(v => ({ value: v.id, label: v.name }))}
+                  />
                 </div>
                 <div className="form-group">
                   <label>Date From</label>
@@ -204,6 +263,7 @@ export default function DailyLog() {
                   className="btn btn-primary"
                   onClick={() => loadDailyLog()}
                   disabled={!dailyVessel || loading}
+                  style={{ width: 160, justifyContent: 'center' }}
                 >
                   <Search size={14} />
                   {loading ? 'Loading…' : 'Load Log'}
@@ -263,14 +323,20 @@ export default function DailyLog() {
               <div className="filters-bar">
                 <div className="form-group">
                   <label>Vessel</label>
-                  <select
-                    className="form-control"
+                  <Dropdown
                     value={summaryVessel}
-                    onChange={e => { setSummaryVessel(e.target.value); setSummaryData(null); }}
-                  >
-                    <option value="">— Select Vessel —</option>
-                    {vessels.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                  </select>
+                    onChange={v => { setSummaryVessel(v); setSummaryData(null); }}
+                    placeholder="— Select Vessel —"
+                    options={vessels.map(v => ({ value: v.id, label: v.name }))}
+                  />
+                </div>
+                <div className="form-group" style={{ flex: '0 0 auto' }}>
+                  <label>Filter Mode</label>
+                  <ModeToggle mode={summaryMode} onChange={setSummaryMode} />
+                </div>
+                <div className="form-group" style={{ flex: '0 0 auto' }}>
+                  <label>Month</label>
+                  <MonthStepper date={summaryMonth} onChange={handleSummaryMonthChange} disabled={summaryMode !== 'month'} />
                 </div>
                 <div className="form-group">
                   <label>Date From</label>
@@ -279,6 +345,7 @@ export default function DailyLog() {
                     className="form-control"
                     value={summaryFrom}
                     onChange={e => setSummaryFrom(e.target.value)}
+                    disabled={summaryMode !== 'custom'}
                   />
                 </div>
                 <div className="form-group">
@@ -288,12 +355,14 @@ export default function DailyLog() {
                     className="form-control"
                     value={summaryTo}
                     onChange={e => setSummaryTo(e.target.value)}
+                    disabled={summaryMode !== 'custom'}
                   />
                 </div>
                 <button
                   className="btn btn-primary"
                   onClick={() => loadSummary()}
                   disabled={!summaryVessel || summaryLoading}
+                  style={{ width: 160, justifyContent: 'center' }}
                 >
                   <Search size={14} />
                   {summaryLoading ? 'Loading…' : 'Load Summary'}

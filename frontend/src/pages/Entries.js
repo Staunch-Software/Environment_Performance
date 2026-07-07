@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import Sidebar from '../components/Layout/Sidebar';
 import Header from '../components/Layout/Header';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
+import Dropdown from '../components/shared/Dropdown';
+import MultiSelectDropdown from '../components/shared/MultiSelectDropdown';
 import api from '../api/axios';
 
 const ORB_CODES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
@@ -12,7 +14,7 @@ export default function Entries() {
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(null);
   const [filters, setFilters] = useState({
-    vessel_id: '', orb_code: '', date_from: '', date_to: '', confidence_below: '',
+    vessel_id: [], orb_code: '', date_from: '', date_to: '', confidence_below: '',
   });
 
   useEffect(() => { api.get('/api/vessels').then(r => setVessels(r.data.data || [])); }, []);
@@ -20,7 +22,10 @@ export default function Entries() {
   const load = () => {
     setLoading(true);
     const params = new URLSearchParams();
-    Object.entries(filters).forEach(([k, v]) => { if (v) params.append(k, v); });
+    Object.entries(filters).forEach(([k, v]) => {
+      if (Array.isArray(v)) v.forEach(item => params.append(k, item));
+      else if (v) params.append(k, v);
+    });
     api.get(`/api/entries?${params}`).then(r => setEntries(r.data.data || [])).finally(() => setLoading(false));
   };
 
@@ -40,17 +45,20 @@ export default function Entries() {
             <div className="filters-bar">
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Vessel</label>
-                <select className="form-control" value={filters.vessel_id} onChange={e => setFilter('vessel_id', e.target.value)}>
-                  <option value="">All</option>
-                  {vessels.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                </select>
+                <MultiSelectDropdown
+                  value={filters.vessel_id}
+                  onChange={v => setFilter('vessel_id', v)}
+                  placeholder="Select the vessel"
+                  options={vessels.map(v => ({ value: v.id, label: v.name }))}
+                />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>ORB Code</label>
-                <select className="form-control" value={filters.orb_code} onChange={e => setFilter('orb_code', e.target.value)}>
-                  <option value="">All</option>
-                  {ORB_CODES.map(c => <option key={c} value={c}>Code {c}</option>)}
-                </select>
+                <Dropdown
+                  value={filters.orb_code}
+                  onChange={v => setFilter('orb_code', v)}
+                  options={[{ value: '', label: 'All' }, ...ORB_CODES.map(c => ({ value: c, label: `Code ${c}` }))]}
+                />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Date From</label>
@@ -62,7 +70,7 @@ export default function Entries() {
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Confidence Below</label>
-                <input type="number" step="0.05" min="0" max="1" className="form-control" style={{ width: 100 }}
+                <input type="number" step="0.05" min="0" max="1" className="form-control"
                   value={filters.confidence_below} onChange={e => setFilter('confidence_below', e.target.value)}
                   placeholder="e.g. 0.75" />
               </div>
@@ -83,9 +91,8 @@ export default function Entries() {
                   {entries.length === 0 ? (
                     <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No entries found.</td></tr>
                   ) : entries.map(e => (
-                    <>
+                    <Fragment key={e.id}>
                       <tr
-                        key={e.id}
                         className={e.confidence_score < 0.75 ? 'row-low-confidence' : ''}
                         style={{ cursor: 'pointer' }}
                         onClick={() => setExpanded(expanded === e.id ? null : e.id)}
@@ -116,7 +123,7 @@ export default function Entries() {
                         </td>
                       </tr>
                       {expanded === e.id && (
-                        <tr key={`${e.id}-exp`} style={{ background: '#f8fafc' }}>
+                        <tr style={{ background: '#f8fafc' }}>
                           <td colSpan={7} style={{ padding: '1rem 2rem' }}>
                             <strong>Quantities:</strong>
                             {e.quantities?.length ? (
@@ -138,7 +145,7 @@ export default function Entries() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

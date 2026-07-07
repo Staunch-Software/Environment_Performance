@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
 
@@ -19,13 +19,13 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 @router.get("/summary")
 async def alert_summary(
-    vessel_id: Optional[uuid.UUID] = None,
+    vessel_id: Optional[List[uuid.UUID]] = Query(None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     q = select(OrbAlert).where(OrbAlert.is_resolved == False)
     if vessel_id:
-        q = q.where(OrbAlert.vessel_id == vessel_id)
+        q = q.where(OrbAlert.vessel_id.in_(vessel_id))
     result = await db.execute(q)
     alerts = result.scalars().all()
 
@@ -44,7 +44,7 @@ async def alert_summary(
 
 @router.get("")
 async def list_alerts(
-    vessel_id: Optional[uuid.UUID] = None,
+    vessel_id: Optional[List[uuid.UUID]] = Query(None),
     severity: Optional[str] = None,
     is_resolved: Optional[bool] = None,
     alert_type: Optional[str] = None,
@@ -53,7 +53,7 @@ async def list_alerts(
 ):
     q = select(OrbAlert).order_by(OrbAlert.created_at.desc())
     if vessel_id:
-        q = q.where(OrbAlert.vessel_id == vessel_id)
+        q = q.where(OrbAlert.vessel_id.in_(vessel_id))
     if severity:
         q = q.where(OrbAlert.severity == severity)
     if is_resolved is not None:

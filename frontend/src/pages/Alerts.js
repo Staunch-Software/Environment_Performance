@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect, useRef } from 'react';
 import Sidebar from '../components/Layout/Sidebar';
 import Header from '../components/Layout/Header';
 import Badge from '../components/shared/Badge';
 import Modal from '../components/shared/Modal';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
+import Dropdown from '../components/shared/Dropdown';
+import MultiSelectDropdown from '../components/shared/MultiSelectDropdown';
 import api from '../api/axios';
 
 const SEVERITIES = ['critical', 'major', 'minor', 'observation'];
@@ -18,16 +20,32 @@ export default function Alerts() {
   const [vessels, setVessels] = useState([]);
   const [summary, setSummary] = useState({});
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ vessel_id: '', severity: '', is_resolved: '', alert_type: '' });
+  const [filters, setFilters] = useState({ vessel_id: [], severity: '', is_resolved: '', alert_type: '' });
   const [resolving, setResolving] = useState(null);
   const [recalculating, setRecalculating] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
+  const [entryCache, setEntryCache] = useState({}); // entry_id -> EntryResponse
+  const [entryLoading, setEntryLoading] = useState(null); // entry_id currently fetching
+  const expandedRowRef = useRef(null);
+
+  // Auto-scroll the expanded "Source ORB Entry" panel into view — it can render
+  // below the fold (especially for the 3rd+ row), and once the entry data loads
+  // the panel grows taller, so re-run after loading finishes too.
+  useEffect(() => {
+    if (expandedId && expandedRowRef.current) {
+      expandedRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [expandedId, entryLoading]);
 
   useEffect(() => { api.get('/api/vessels').then(r => setVessels(r.data.data || [])); }, []);
 
   const load = () => {
     setLoading(true);
     const params = new URLSearchParams();
-    Object.entries(filters).forEach(([k, v]) => { if (v !== '') params.append(k, v); });
+    Object.entries(filters).forEach(([k, v]) => {
+      if (Array.isArray(v)) v.forEach(item => params.append(k, item));
+      else if (v !== '') params.append(k, v);
+    });
     Promise.all([
       api.get(`/api/alerts?${params}`),
       api.get('/api/alerts/summary'),
@@ -41,6 +59,20 @@ export default function Alerts() {
 
   const setFilter = (k, v) => setFilters(f => ({ ...f, [k]: v }));
 
+  const toggleExpand = async (alert) => {
+    if (expandedId === alert.id) { setExpandedId(null); return; }
+    setExpandedId(alert.id);
+    if (alert.entry_id && !entryCache[alert.entry_id]) {
+      setEntryLoading(alert.entry_id);
+      try {
+        const r = await api.get(`/api/entries/${alert.entry_id}`);
+        setEntryCache(c => ({ ...c, [alert.entry_id]: r.data.data }));
+      } finally {
+        setEntryLoading(null);
+      }
+    }
+  };
+
   const handleResolve = async () => {
     await api.patch(`/api/alerts/${resolving}/resolve`, { notes: '' });
     setResolving(null);
@@ -48,10 +80,10 @@ export default function Alerts() {
   };
 
   const handleRecalculate = async () => {
-    if (!filters.vessel_id) return;
+    if (filters.vessel_id.length !== 1) return;
     setRecalculating(true);
     try {
-      await api.post(`/api/alerts/recalculate?vessel_id=${filters.vessel_id}`);
+      await api.post(`/api/alerts/recalculate?vessel_id=${filters.vessel_id[0]}`);
       load();
     } finally {
       setRecalculating(false);
@@ -86,43 +118,48 @@ export default function Alerts() {
             <div className="filters-bar">
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Vessel</label>
-                <select className="form-control" value={filters.vessel_id} onChange={e => setFilter('vessel_id', e.target.value)}>
-                  <option value="">All</option>
-                  {vessels.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                </select>
+                <MultiSelectDropdown
+                  value={filters.vessel_id}
+                  onChange={v => setFilter('vessel_id', v)}
+                  placeholder="Select the vessel"
+                  options={vessels.map(v => ({ value: v.id, label: v.name }))}
+                />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Severity</label>
-                <select className="form-control" value={filters.severity} onChange={e => setFilter('severity', e.target.value)}>
-                  <option value="">All</option>
-                  {SEVERITIES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <Dropdown
+                  value={filters.severity}
+                  onChange={v => setFilter('severity', v)}
+                  options={[{ value: '', label: 'All' }, ...SEVERITIES.map(s => ({ value: s, label: s }))]}
+                />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Status</label>
-                <select className="form-control" value={filters.is_resolved} onChange={e => setFilter('is_resolved', e.target.value)}>
-                  <option value="">All</option>
-                  <option value="false">Open</option>
-                  <option value="true">Resolved</option>
-                </select>
+                <Dropdown
+                  value={filters.is_resolved}
+                  onChange={v => setFilter('is_resolved', v)}
+                  options={[{ value: '', label: 'All' }, { value: 'false', label: 'Open' }, { value: 'true', label: 'Resolved' }]}
+                />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Type</label>
-                <select className="form-control" value={filters.alert_type} onChange={e => setFilter('alert_type', e.target.value)}>
-                  <option value="">All</option>
-                  {ALERT_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-                </select>
+                <Dropdown
+                  value={filters.alert_type}
+                  onChange={v => setFilter('alert_type', v)}
+                  options={[{ value: '', label: 'All' }, ...ALERT_TYPES.map(t => ({ value: t, label: t.replace(/_/g, ' ') }))]}
+                />
               </div>
-              <button className="btn btn-primary" onClick={load} style={{ alignSelf: 'flex-end' }}>Apply</button>
-              <button
-                className="btn btn-secondary"
-                onClick={handleRecalculate}
-                disabled={!filters.vessel_id || recalculating}
-                title={!filters.vessel_id ? 'Select a vessel first' : 'Clear stale alerts and rerun all compliance checks'}
-                style={{ alignSelf: 'flex-end' }}
-              >
-                {recalculating ? 'Recalculating…' : 'Recalculate Alerts'}
-              </button>
+              <div style={{ display: 'flex', gap: '0.75rem', alignSelf: 'flex-end', flexShrink: 0 }}>
+                <button className="btn btn-primary" onClick={load}>Apply</button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleRecalculate}
+                  disabled={filters.vessel_id.length !== 1 || recalculating}
+                  title={filters.vessel_id.length !== 1 ? 'Select exactly one vessel first' : 'Clear stale alerts and rerun all compliance checks'}
+                >
+                  {recalculating ? 'Recalculating…' : 'Recalculate Alerts'}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -138,36 +175,90 @@ export default function Alerts() {
                 <tbody>
                   {alerts.length === 0 ? (
                     <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No alerts found.</td></tr>
-                  ) : alerts.map(a => (
-                    <tr key={a.id}>
-                      <td><Badge value={a.severity} /></td>
-                      <td style={{ fontSize: '0.85rem' }}>{vessels.find(v => v.id === a.vessel_id)?.name || '—'}</td>
-                      <td style={{ fontSize: '0.8rem' }}>{a.alert_type.replace(/_/g, ' ')}</td>
-                      <td style={{ maxWidth: 320, fontSize: '0.85rem' }}>{a.message}</td>
-                      <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {new Date(a.created_at).toLocaleDateString()}
-                        {!a.is_resolved && (() => {
-                          const days = Math.floor((Date.now() - new Date(a.created_at)) / 86400000);
-                          const color = days < 7 ? '#22c55e' : days < 30 ? '#f59e0b' : '#ef4444';
-                          return (
-                            <span style={{
-                              marginLeft: '0.4rem', fontSize: '0.72rem', fontWeight: 700,
-                              color, background: color + '18', borderRadius: 4,
-                              padding: '1px 5px',
-                            }}>
-                              {days === 0 ? 'Today' : `${days}d`}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td><Badge value={a.is_resolved ? 'Resolved' : 'Open'} type={a.is_resolved ? 'completed' : 'pending'} /></td>
-                      <td>
-                        {!a.is_resolved && (
-                          <button className="btn btn-ghost btn-sm" onClick={() => setResolving(a.id)}>Resolve</button>
+                  ) : alerts.map(a => {
+                    const expanded = expandedId === a.id;
+                    const entry = a.entry_id ? entryCache[a.entry_id] : null;
+                    return (
+                      <Fragment key={a.id}>
+                        <tr onClick={() => toggleExpand(a)} style={{ cursor: 'pointer' }}>
+                          <td><Badge value={a.severity} /></td>
+                          <td style={{ fontSize: '0.85rem' }}>{vessels.find(v => v.id === a.vessel_id)?.name || '—'}</td>
+                          <td style={{ fontSize: '0.8rem' }}>{a.alert_type.replace(/_/g, ' ')}</td>
+                          <td style={{ maxWidth: 320, fontSize: '0.85rem' }}>{a.message}</td>
+                          <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            {new Date(a.created_at).toLocaleDateString()}
+                            {!a.is_resolved && (() => {
+                              const days = Math.floor((Date.now() - new Date(a.created_at)) / 86400000);
+                              const color = days < 7 ? '#22c55e' : days < 30 ? '#f59e0b' : '#ef4444';
+                              return (
+                                <span style={{
+                                  marginLeft: '0.4rem', fontSize: '0.72rem', fontWeight: 700,
+                                  color, background: color + '18', borderRadius: 4,
+                                  padding: '1px 5px',
+                                }}>
+                                  {days === 0 ? 'Today' : `${days}d`}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          <td><Badge value={a.is_resolved ? 'Resolved' : 'Open'} type={a.is_resolved ? 'completed' : 'pending'} /></td>
+                          <td>
+                            {!a.is_resolved && (
+                              <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setResolving(a.id); }}>Resolve</button>
+                            )}
+                          </td>
+                        </tr>
+                        {expanded && (
+                          <tr key={`${a.id}-exp`} ref={expandedRowRef} style={{ background: '#f8fafc' }}>
+                            <td colSpan={7} style={{ padding: '1rem 2rem' }}>
+                              {!a.entry_id ? (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                  No specific entry — this is a vessel-level aggregate alert.
+                                </span>
+                              ) : entryLoading === a.entry_id ? (
+                                <LoadingSpinner />
+                              ) : !entry ? (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Source entry not found.</span>
+                              ) : (
+                                <>
+                                  <strong>Source ORB Entry</strong>
+                                  <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                                    <div><span style={{ color: 'var(--text-muted)' }}>Date:</span> {entry.entry_date}</div>
+                                    <div><span style={{ color: 'var(--text-muted)' }}>Code:</span> <strong>{entry.orb_code}</strong></div>
+                                    <div><span style={{ color: 'var(--text-muted)' }}>Item:</span> {entry.item_number || '—'}</div>
+                                    <div><span style={{ color: 'var(--text-muted)' }}>Tank/Location:</span> {entry.tank_location || '—'}</div>
+                                    <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--text-muted)' }}>Operation:</span> {entry.operation_description}</div>
+                                    <div><span style={{ color: 'var(--text-muted)' }}>Officer 1:</span> {entry.officer_1_name || '—'} {entry.officer_1_rank ? `(${entry.officer_1_rank})` : ''}</div>
+                                    <div><span style={{ color: 'var(--text-muted)' }}>Officer 2:</span> {entry.officer_2_name || '—'} {entry.officer_2_rank ? `(${entry.officer_2_rank})` : ''}</div>
+                                    <div><span style={{ color: 'var(--text-muted)' }}>Confidence:</span> {entry.confidence_score != null ? `${(entry.confidence_score * 100).toFixed(0)}%` : '—'}</div>
+                                  </div>
+                                  <div style={{ marginTop: '0.75rem' }}>
+                                    <strong>Quantities:</strong>
+                                    {entry.quantities?.length ? (
+                                      <table style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>
+                                        <thead><tr><th style={{ paddingRight: 16 }}>Type</th><th style={{ paddingRight: 16 }}>Value</th><th style={{ paddingRight: 16 }}>Unit</th><th style={{ paddingRight: 16 }}>From</th><th>To</th></tr></thead>
+                                        <tbody>
+                                          {entry.quantities.map(q => (
+                                            <tr key={q.id}>
+                                              <td style={{ paddingRight: 16 }}>{q.qty_type}</td>
+                                              <td style={{ paddingRight: 16 }}>{q.qty_value}</td>
+                                              <td style={{ paddingRight: 16 }}>{q.qty_unit}</td>
+                                              <td style={{ paddingRight: 16 }}>{q.from_tank || '—'}</td>
+                                              <td>{q.to_tank || '—'}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    ) : <span style={{ marginLeft: '0.5rem', color: 'var(--text-muted)' }}>None</span>}
+                                  </div>
+                                </>
+                              )}
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                    </tr>
-                  ))}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

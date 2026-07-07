@@ -3,7 +3,10 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import Modal from '../../components/shared/Modal';
 import Badge from '../../components/shared/Badge';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
+import Dropdown from '../../components/shared/Dropdown';
 import api from '../../api/axios';
+
+const TANK_GROUPS = ['FUEL OIL TANK', 'DIESEL OIL TANK', 'L.O. & Cyl. Oil', 'SLUDGE OIL', 'BILGE WATER', 'GRAY WATER'];
 
 export default function VesselConfiguration() {
   const [vessels, setVessels] = useState([]);
@@ -15,8 +18,13 @@ export default function VesselConfiguration() {
   const [vesselForm, setVesselForm] = useState({ name: '', imo_number: '', call_sign: '' });
   const [tankForm, setTankForm] = useState({ tank_name: '', tank_code: '', tank_group: '', capacity_m3: '', is_iopp: true, is_evaporation_allowed: false });
   const [editTank, setEditTank] = useState(null); // { vesselId, tank }
+  const [tankFiles, setTankFiles] = useState({ doc1: null, doc2: null });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [docModal, setDocModal] = useState(null); // { vesselId, tank }
+  const [docUrls, setDocUrls] = useState({}); // { 1: objectUrl, 2: objectUrl }
+  const [docLoading, setDocLoading] = useState(false);
+  const [activeDocTab, setActiveDocTab] = useState(1);
 
   const loadVessels = () => {
     setLoading(true);
@@ -59,33 +67,52 @@ export default function VesselConfiguration() {
     finally { setSaving(false); }
   };
 
+  const buildTankFormData = () => {
+    const fd = new FormData();
+    fd.append('tank_name', tankForm.tank_name);
+    fd.append('tank_code', tankForm.tank_code);
+    fd.append('tank_group', tankForm.tank_group || '');
+    fd.append('capacity_m3', parseFloat(tankForm.capacity_m3));
+    fd.append('is_iopp', tankForm.is_iopp);
+    fd.append('is_evaporation_allowed', tankForm.is_evaporation_allowed);
+    if (tankFiles.doc1) fd.append('iopp_doc1', tankFiles.doc1);
+    if (tankFiles.doc2) fd.append('iopp_doc2', tankFiles.doc2);
+    return fd;
+  };
+
   const handleAddTank = async () => {
+    if (tankForm.is_iopp && !tankFiles.doc1 && !tankFiles.doc2) {
+      setError('At least one IOPP document is required for an IOPP tank');
+      return;
+    }
     setSaving(true); setError('');
     try {
-      await api.post(`/api/vessels/${addTankFor}/tanks`, {
-        ...tankForm, capacity_m3: parseFloat(tankForm.capacity_m3),
+      await api.post(`/api/vessels/${addTankFor}/tanks`, buildTankFormData(), {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       setAddTankFor(null);
-      setTankForm({ tank_name: '', tank_code: '', tank_group: '', capacity_m3: '' });
+      setTankForm({ tank_name: '', tank_code: '', tank_group: '', capacity_m3: '', is_iopp: true, is_evaporation_allowed: false });
+      setTankFiles({ doc1: null, doc2: null });
       await loadTanks(addTankFor);
     } catch (e) { setError(e.response?.data?.detail || 'Failed'); }
     finally { setSaving(false); }
   };
 
   const handleEditTank = async () => {
+    const hasExistingDocs = editTank.tank.iopp_doc1_url || editTank.tank.iopp_doc2_url;
+    if (tankForm.is_iopp && !hasExistingDocs && !tankFiles.doc1 && !tankFiles.doc2) {
+      setError('At least one IOPP document is required for an IOPP tank');
+      return;
+    }
     setSaving(true); setError('');
     try {
-      await api.put(`/api/vessels/${editTank.vesselId}/tanks/${editTank.tank.id}`, {
-        tank_name: tankForm.tank_name,
-        tank_code: tankForm.tank_code,
-        tank_group: tankForm.tank_group,
-        capacity_m3: parseFloat(tankForm.capacity_m3),
-        is_iopp: tankForm.is_iopp,
-        is_evaporation_allowed: tankForm.is_evaporation_allowed,
+      await api.put(`/api/vessels/${editTank.vesselId}/tanks/${editTank.tank.id}`, buildTankFormData(), {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       await loadTanks(editTank.vesselId);
       setEditTank(null);
       setTankForm({ tank_name: '', tank_code: '', tank_group: '', capacity_m3: '', is_iopp: true, is_evaporation_allowed: false });
+      setTankFiles({ doc1: null, doc2: null });
     } catch (e) { setError(e.response?.data?.detail || 'Failed'); }
     finally { setSaving(false); }
   };
@@ -93,6 +120,33 @@ export default function VesselConfiguration() {
   const deactivateTank = async (vesselId, tankId) => {
     await api.patch(`/api/vessels/${vesselId}/tanks/${tankId}/deactivate`);
     await loadTanks(vesselId);
+  };
+
+  const openDocModal = async (vesselId, tank) => {
+    setDocModal({ vesselId, tank });
+    setActiveDocTab(1);
+    setDocUrls({});
+    setDocLoading(true);
+    try {
+      const docNums = [tank.iopp_doc1_url ? 1 : null, tank.iopp_doc2_url ? 2 : null].filter(Boolean);
+      const results = await Promise.all(
+        docNums.map(n => api.get(`/api/vessels/${vesselId}/tanks/${tank.id}/iopp-doc/${n}`, { responseType: 'blob' }))
+      );
+      const urls = {};
+      docNums.forEach((n, i) => { urls[n] = URL.createObjectURL(results[i].data); });
+      setDocUrls(urls);
+      setActiveDocTab(docNums[0] || 1);
+    } catch (e) {
+      setError('Failed to load IOPP documents');
+    } finally {
+      setDocLoading(false);
+    }
+  };
+
+  const closeDocModal = () => {
+    Object.values(docUrls).forEach(url => URL.revokeObjectURL(url));
+    setDocModal(null);
+    setDocUrls({});
   };
 
   return (
@@ -123,7 +177,7 @@ export default function VesselConfiguration() {
                   </span>
                   <button
                     className="btn btn-ghost btn-sm"
-                    onClick={(e) => { e.stopPropagation(); setAddTankFor(v.id); setError(''); }}
+                    onClick={(e) => { e.stopPropagation(); setAddTankFor(v.id); setTankFiles({ doc1: null, doc2: null }); setError(''); }}
                   >+ Add Tank</button>
                   {expanded === v.id
                     ? <ChevronUp size={18} color="var(--text-muted)" />
@@ -139,15 +193,15 @@ export default function VesselConfiguration() {
                   </div>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ background: 'var(--border)' }}>
-                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem' }}>Tank Name</th>
-                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem' }}>Code</th>
-                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem' }}>Group</th>
-                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem' }}>Capacity (m³)</th>
-                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem' }}>IOPP</th>
-                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem' }}>Evap. Allowed</th>
-                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem' }}>Status</th>
-                        <th style={{ padding: '0.5rem', fontSize: '0.8rem' }}>Action</th>
+                      <tr style={{ background: '#1F4E79' }}>
+                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem', color: '#fff' }}>Tank Name</th>
+                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem', color: '#fff' }}>Code</th>
+                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem', color: '#fff' }}>Group</th>
+                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem', color: '#fff' }}>Capacity (m³)</th>
+                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem', color: '#fff' }}>IOPP</th>
+                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem', color: '#fff' }}>Evap. Allowed</th>
+                        <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.8rem', color: '#fff' }}>Status</th>
+                        <th style={{ padding: '0.5rem', fontSize: '0.8rem', color: '#fff' }}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -171,7 +225,15 @@ export default function VesselConfiguration() {
                               <td style={{ padding: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t.tank_group || '—'}</td>
                               <td style={{ padding: '0.5rem' }}>{t.capacity_m3}</td>
                               <td style={{ padding: '0.5rem', textAlign: 'center' }}>
-                                <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: '0.78rem', fontWeight: 600, background: t.is_iopp ? '#E2EFDA' : '#FFF0E0', color: t.is_iopp ? '#2d6a2d' : '#7d4a00' }}>
+                                <span
+                                  onClick={t.is_iopp && (t.iopp_doc1_url || t.iopp_doc2_url) ? () => openDocModal(v.id, t) : undefined}
+                                  title={t.is_iopp && (t.iopp_doc1_url || t.iopp_doc2_url) ? 'View IOPP documents' : undefined}
+                                  style={{
+                                    padding: '2px 8px', borderRadius: 4, fontSize: '0.78rem', fontWeight: 600,
+                                    background: t.is_iopp ? '#E2EFDA' : '#FFF0E0', color: t.is_iopp ? '#2d6a2d' : '#7d4a00',
+                                    cursor: t.is_iopp && (t.iopp_doc1_url || t.iopp_doc2_url) ? 'pointer' : 'default',
+                                  }}
+                                >
                                   {t.is_iopp ? 'IOPP' : 'NON-IOPP'}
                                 </span>
                               </td>
@@ -191,6 +253,7 @@ export default function VesselConfiguration() {
                                       is_iopp: t.is_iopp ?? true,
                                       is_evaporation_allowed: t.is_evaporation_allowed ?? false,
                                     });
+                                    setTankFiles({ doc1: null, doc2: null });
                                     setError('');
                                   }}>Edit</button>
                                   {t.is_active && (
@@ -226,7 +289,7 @@ export default function VesselConfiguration() {
       )}
 
       {addTankFor && (
-        <Modal title="Add Tank" onClose={() => setAddTankFor(null)} footer={
+        <Modal title="Add Tank" onClose={() => { setAddTankFor(null); setTankFiles({ doc1: null, doc2: null }); }} footer={
           <>
             <button className="btn btn-secondary" onClick={() => setAddTankFor(null)}>Cancel</button>
             <button className="btn btn-primary" onClick={handleAddTank} disabled={saving}>{saving ? 'Saving…' : 'Add Tank'}</button>
@@ -237,21 +300,33 @@ export default function VesselConfiguration() {
           <div className="form-group"><label>Tank Code *</label><input className="form-control" value={tankForm.tank_code} onChange={e => setTankForm({ ...tankForm, tank_code: e.target.value })} placeholder="e.g. FO1P" /></div>
           <div className="form-group">
             <label>Group</label>
-            <select className="form-control" value={tankForm.tank_group} onChange={e => setTankForm({ ...tankForm, tank_group: e.target.value })}>
-              <option value="">— Select Group —</option>
-              <option value="FUEL OIL TANK">FUEL OIL TANK</option>
-              <option value="DIESEL OIL TANK">DIESEL OIL TANK</option>
-              <option value="L.O. & Cyl. Oil">L.O. &amp; Cyl. Oil</option>
-              <option value="SLUDGE OIL">SLUDGE OIL</option>
-              <option value="BILGE WATER">BILGE WATER</option>
-              <option value="GRAY WATER">GRAY WATER</option>
-            </select>
+            <Dropdown
+              value={tankForm.tank_group}
+              onChange={v => setTankForm({ ...tankForm, tank_group: v })}
+              placeholder="— Select Group —"
+              options={TANK_GROUPS.map(g => ({ value: g, label: g }))}
+            />
           </div>
           <div className="form-group"><label>Capacity (m³) *</label><input type="number" step="0.01" className="form-control" value={tankForm.capacity_m3} onChange={e => setTankForm({ ...tankForm, capacity_m3: e.target.value })} /></div>
           <div className="checkbox-row">
             <input type="checkbox" id="is_iopp" checked={tankForm.is_iopp} onChange={e => setTankForm({ ...tankForm, is_iopp: e.target.checked })} />
             <label htmlFor="is_iopp">IOPP Tank</label>
           </div>
+          {tankForm.is_iopp && (
+            <>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '-0.25rem', marginBottom: '0.5rem' }}>
+                At least one IOPP document is required — both slots are optional individually.
+              </p>
+              <div className="form-group">
+                <label>IOPP Document 1</label>
+                <input type="file" className="form-control" onChange={e => setTankFiles(f => ({ ...f, doc1: e.target.files[0] || null }))} />
+              </div>
+              <div className="form-group">
+                <label>IOPP Document 2</label>
+                <input type="file" className="form-control" onChange={e => setTankFiles(f => ({ ...f, doc2: e.target.files[0] || null }))} />
+              </div>
+            </>
+          )}
           <div className="checkbox-row">
             <input type="checkbox" id="is_evap" checked={tankForm.is_evaporation_allowed} onChange={e => setTankForm({ ...tankForm, is_evaporation_allowed: e.target.checked })} />
             <label htmlFor="is_evap">Evaporation Allowed (as per IOPP Certificate)</label>
@@ -259,7 +334,7 @@ export default function VesselConfiguration() {
         </Modal>
       )}
     {editTank && (
-        <Modal title={`Edit Tank — ${editTank.tank.tank_name}`} onClose={() => setEditTank(null)} footer={
+        <Modal title={`Edit Tank — ${editTank.tank.tank_name}`} onClose={() => { setEditTank(null); setTankFiles({ doc1: null, doc2: null }); }} footer={
           <>
             <button className="btn btn-secondary" onClick={() => setEditTank(null)}>Cancel</button>
             <button className="btn btn-primary" onClick={handleEditTank} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>
@@ -270,25 +345,76 @@ export default function VesselConfiguration() {
           <div className="form-group"><label>Tank Code *</label><input className="form-control" value={tankForm.tank_code} onChange={e => setTankForm({ ...tankForm, tank_code: e.target.value })} /></div>
           <div className="form-group">
             <label>Group</label>
-            <select className="form-control" value={tankForm.tank_group} onChange={e => setTankForm({ ...tankForm, tank_group: e.target.value })}>
-              <option value="">— Select Group —</option>
-              <option value="FUEL OIL TANK">FUEL OIL TANK</option>
-              <option value="DIESEL OIL TANK">DIESEL OIL TANK</option>
-              <option value="L.O. & Cyl. Oil">L.O. &amp; Cyl. Oil</option>
-              <option value="SLUDGE OIL">SLUDGE OIL</option>
-              <option value="BILGE WATER">BILGE WATER</option>
-              <option value="GRAY WATER">GRAY WATER</option>
-            </select>
+            <Dropdown
+              value={tankForm.tank_group}
+              onChange={v => setTankForm({ ...tankForm, tank_group: v })}
+              placeholder="— Select Group —"
+              options={TANK_GROUPS.map(g => ({ value: g, label: g }))}
+            />
           </div>
           <div className="form-group"><label>Capacity (m³) *</label><input type="number" step="0.01" className="form-control" value={tankForm.capacity_m3} onChange={e => setTankForm({ ...tankForm, capacity_m3: e.target.value })} /></div>
           <div className="checkbox-row">
             <input type="checkbox" id="edit_is_iopp" checked={tankForm.is_iopp} onChange={e => setTankForm({ ...tankForm, is_iopp: e.target.checked })} />
             <label htmlFor="edit_is_iopp">IOPP Tank</label>
           </div>
+          {tankForm.is_iopp && (
+            <>
+              {!(editTank.tank.iopp_doc1_url || editTank.tank.iopp_doc2_url) && (
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '-0.25rem', marginBottom: '0.5rem' }}>
+                  At least one IOPP document is required — both slots are optional individually.
+                </p>
+              )}
+              <div className="form-group">
+                <label>IOPP Document 1 {editTank.tank.iopp_doc1_url ? '(uploaded — choose a file to replace)' : ''}</label>
+                <input type="file" className="form-control" onChange={e => setTankFiles(f => ({ ...f, doc1: e.target.files[0] || null }))} />
+              </div>
+              <div className="form-group">
+                <label>IOPP Document 2 {editTank.tank.iopp_doc2_url ? '(uploaded — choose a file to replace)' : ''}</label>
+                <input type="file" className="form-control" onChange={e => setTankFiles(f => ({ ...f, doc2: e.target.files[0] || null }))} />
+              </div>
+            </>
+          )}
           <div className="checkbox-row">
             <input type="checkbox" id="edit_is_evap" checked={tankForm.is_evaporation_allowed} onChange={e => setTankForm({ ...tankForm, is_evaporation_allowed: e.target.checked })} />
             <label htmlFor="edit_is_evap">Evaporation Allowed (as per IOPP Certificate)</label>
           </div>
+        </Modal>
+      )}
+
+      {docModal && (
+        <Modal
+          title={`IOPP Documents — ${docModal.tank.tank_name}`}
+          onClose={closeDocModal}
+          wide
+          footer={<button className="btn btn-secondary" onClick={closeDocModal}>Close</button>}
+        >
+          {docLoading ? <LoadingSpinner /> : (
+            <>
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                {docModal.tank.iopp_doc1_url && (
+                  <button
+                    className={`btn btn-sm ${activeDocTab === 1 ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setActiveDocTab(1)}
+                  >Document 1</button>
+                )}
+                {docModal.tank.iopp_doc2_url && (
+                  <button
+                    className={`btn btn-sm ${activeDocTab === 2 ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setActiveDocTab(2)}
+                  >Document 2</button>
+                )}
+              </div>
+              {docUrls[activeDocTab] ? (
+                <iframe
+                  src={docUrls[activeDocTab]}
+                  title={`IOPP Document ${activeDocTab}`}
+                  style={{ width: '100%', height: '65vh', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}
+                />
+              ) : (
+                <div className="empty-state">Document not available.</div>
+              )}
+            </>
+          )}
         </Modal>
       )}
     </div>

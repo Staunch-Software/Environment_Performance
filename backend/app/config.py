@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # proxy that breaks certificate validation. MUST stay False on the VM/prod.
     DISABLE_SSL_VERIFY: bool = False
 
+    # Azure Blob Storage — stores IOPP tank certificate/survey documents.
+    AZURE_STORAGE_CONNECTION_STRING: str = ""
+    AZURE_STORAGE_CONTAINER: str = "iopp-documents"
+
 
 @lru_cache
 def get_settings() -> Settings:

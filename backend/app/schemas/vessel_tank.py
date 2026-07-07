@@ -34,5 +34,7 @@ class TankResponse(BaseModel):
     is_iopp: bool
     is_evaporation_allowed: bool
     is_active: bool
+    iopp_doc1_url: Optional[str] = None
+    iopp_doc2_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
