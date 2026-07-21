@@ -12,15 +12,20 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('1. handleSubmit started');
     setError('');
     setLoading(true);
     try {
+      console.log('2. calling login()');
       await login(email, password);
+      console.log('3. login() succeeded');
       navigate('/dashboard');
     } catch (err) {
+      console.log('4. login() threw an error:', err);
       setError(err.response?.data?.detail || 'Invalid email or password');
     } finally {
       setLoading(false);
+      console.log('5. finally block ran');
     }
   };
 

@@ -116,7 +116,7 @@ App available at: http://localhost:3000
 | Field | Value |
 |-------|-------|
 | Email | `admin@orbplatform.com` |
-| Password | `Admin@123` |
+| Password | `12345` |
 
 ---
 

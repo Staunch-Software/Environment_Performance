@@ -19,14 +19,14 @@ router = APIRouter(prefix="/vessels", tags=["vessel_tanks"])
 @router.get("/{vessel_id}/tanks")
 async def list_tanks(
     vessel_id: uuid.UUID,
-    grouped: bool = False,   # ← pass ?grouped=true from frontend to get grouped view
+    grouped: bool = False,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     result = await db.execute(
         select(VesselTank)
         .where(VesselTank.vessel_id == vessel_id)
-        .order_by(VesselTank.tank_group, VesselTank.tank_name)   # ← order by group first
+        .order_by(VesselTank.tank_group, VesselTank.tank_name)
     )
     tanks = result.scalars().all()
 
@@ -34,12 +34,26 @@ async def list_tanks(
         groups = {}
         for t in tanks:
             key = t.tank_group or "Ungrouped"
-            groups.setdefault(key, {"group": key, "tanks": [], "total_capacity_m3": 0.0})
+            # FIX: Ensure capacity is treated as 0.0 if None
+            tank_capacity = t.capacity_m3 if t.capacity_m3 is not None else 0.0
+            
+            if key not in groups:
+                groups[key] = {"group": key, "tanks": [], "total_capacity_m3": 0.0}
+            
             groups[key]["tanks"].append(TankResponse.model_validate(t).model_dump())
-            groups[key]["total_capacity_m3"] += t.capacity_m3
+            groups[key]["total_capacity_m3"] += tank_capacity
         return success(data=list(groups.values()))
 
-    return success(data=[TankResponse.model_validate(t).model_dump() for t in tanks])
+    # For the non-grouped return, you might also have NaN in the list
+    # Let's ensure the data sent is clean
+    response_data = []
+    for t in tanks:
+        data = TankResponse.model_validate(t).model_dump()
+        # Ensure numbers aren't None before sending to JSON
+        data['capacity_m3'] = data.get('capacity_m3') or 0.0
+        response_data.append(data)
+        
+    return success(data=response_data)
 
 async def _store_iopp_docs(iopp_doc1: Optional[UploadFile], iopp_doc2: Optional[UploadFile]):
     """Upload whichever of the two IOPP files were actually provided — at

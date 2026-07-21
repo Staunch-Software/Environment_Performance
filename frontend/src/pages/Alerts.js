@@ -9,10 +9,22 @@ import MultiSelectDropdown from '../components/shared/MultiSelectDropdown';
 import api from '../api/axios';
 
 const SEVERITIES = ['critical', 'major', 'minor', 'observation'];
+
+// 12 alert types per the new compliance spec
 const ALERT_TYPES = [
-  'wrong_item_code', 'mass_balance_error', 'overdue_sounding',
-  'tank_capacity_threshold', 'combined_capacity_threshold',
-  'sludge_generation_rate', 'overdue_discharge', 'missing_bdn', 'low_confidence_extraction',
+  'wrong_item_code',                 // 1  Major
+  'mass_balance_error',              // 2  Major
+  'tank_capacity_exceeded',          // 3  Critical
+  'combined_capacity_threshold',     // 4  Major
+  'sludge_generation_rate',          // 5  Observation/Minor
+  'bilge_increasing_rate',           // 6  Major
+  'sludge_vs_fuel_consumption',      // 7  Observation/Major/Critical
+  'bilge_transfer_vs_soundings',     // 8  Minor
+  // 'bilge_pump_capacity' (9) omitted — check paused, no UI to set pump capacity yet
+  'bunker_mismatch',                 // 10 Minor
+  'missing_master_signature',        // 11 Minor
+  'non_chronological_entry',         // 12 Minor
+  'erasure_detected',                // 12 Observation
 ];
 
 export default function Alerts() {

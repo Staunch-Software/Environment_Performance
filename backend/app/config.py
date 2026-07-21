@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     ANTHROPIC_API_KEY: str = ""
-    GEMINI_API_KEY: str = ""  
+    GEMINI_API_KEY: str = ""
     USE_MOCK_EXTRACTION: bool = True
     UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_SIZE_MB: int = 50
@@ -33,6 +33,17 @@ class Settings(BaseSettings):
     # Azure Blob Storage — stores IOPP tank certificate/survey documents.
     AZURE_STORAGE_CONNECTION_STRING: str = ""
     AZURE_STORAGE_CONTAINER: str = "iopp-documents"
+
+    # ── WNI Fuel Scraper (Check 7 support) ─────────────────────────────────
+    # Separate, standalone scraper — see app/scrapers/wni_fuel_scraper.py.
+    # Reuses the same WNI portal credentials as the existing historical
+    # scraper; set these in .env (same values you already use there).
+    WNI_LOGIN_URL: str = ""
+    WNI_USERNAME: str = ""
+    WNI_PASSWORD: str = ""
+    # Path to the newline-delimited vessel name list used by the fuel
+    # scraper. Defaults to a file named vessels.txt in the backend root.
+    WNI_VESSELS_FILE: str = "vessels.txt"
 
 
 @lru_cache

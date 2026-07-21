@@ -6,6 +6,7 @@ from app.models.orb_upload import OrbUpload
 from app.models.orb_entry import OrbEntry
 from app.models.orb_entry_quantity import OrbEntryQuantity
 from app.models.orb_alert import OrbAlert
+from app.models.fuel_consumption import FuelConsumption
 
 __all__ = [
     "Base",
@@ -16,4 +17,5 @@ __all__ = [
     "OrbEntry",
     "OrbEntryQuantity",
     "OrbAlert",
+    "FuelConsumption",
 ]

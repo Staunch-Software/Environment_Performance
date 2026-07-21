@@ -454,6 +454,7 @@ async def extract_with_gemini(storage_path: str) -> list[dict]:
     from pdf2image import convert_from_path
     import io
     import httpx
+    from pathlib import Path
     
     # Only force-disable httpx TLS verification when explicitly enabled (local
     # SSL-inspecting proxy). On the VM/prod this block is skipped → secure.
@@ -477,18 +478,36 @@ async def extract_with_gemini(storage_path: str) -> list[dict]:
     )
 
     try:
-        # On the VM (Linux), POPPLER_PATH is empty → pdf2image finds pdftoppm on
-        # the system PATH (/usr/bin). On local Windows, set POPPLER_PATH in .env.
-        # Hardcoded local path kept for reference:
-        # poppler_path=r"C:\poppler\poppler-26.02.0\Library\bin"
-        poppler_kwargs = {"poppler_path": settings.POPPLER_PATH} if settings.POPPLER_PATH else {}
-        pages = convert_from_path(
-            storage_path,
-            dpi=200,
-            **poppler_kwargs,
-        )
+        # Determine Poppler path
+        poppler_path = None
+
+        # 1. Use POPPLER_PATH from .env if available
+        if settings.POPPLER_PATH:
+            poppler_path = settings.POPPLER_PATH
+
+        # 2. Otherwise use backend/poppler/Library/bin
+        else:
+            project_root = Path(__file__).resolve().parents[2]
+            local_poppler = project_root / "poppler" / "Library" / "bin"
+
+            if local_poppler.exists():
+                poppler_path = str(local_poppler)
+
+        # Convert PDF pages
+        if poppler_path:
+            pages = convert_from_path(
+                storage_path,
+                dpi=200,
+                poppler_path=poppler_path,
+            )
+        else:
+            pages = convert_from_path(
+                storage_path,
+                dpi=200,
+            )
+
     except Exception as e:
-        logger.error(f"Failed to convert PDF to images: {e}")
+        logger.exception("Failed to convert PDF to images")
         return []
 
     def _call_gemini(page_image, page_num):
@@ -686,84 +705,77 @@ async def run_extraction(
                 seen_this_upload.add(fp)
 
                 try:
-                    async with db.begin_nested():
-                        entry = OrbEntry(
-                            id=uuid.uuid4(),
-                            upload_id=upload_id,
-                            vessel_id=vessel_id,
-                            entry_date=entry_date,
-                            orb_code=orb_code,
-                            item_number=entry_dict.get("item_number"),
-                            operation_description=entry_dict.get("operation_description", ""),
-                            tank_location=tank_location,
-                            time_start=entry_dict.get("time_start"),
-                            time_stop=entry_dict.get("time_stop"),
-                            position_start=entry_dict.get("position_start"),
-                            position_stop=entry_dict.get("position_stop"),
-                            officer_1_name=entry_dict.get("officer_1_name"),
-                            officer_1_rank=entry_dict.get("officer_1_rank"),
-                            officer_2_name=entry_dict.get("officer_2_name"),
-                            officer_2_rank=entry_dict.get("officer_2_rank"),
-                            raw_text=raw_text,
-                            confidence_score=entry_dict.get("confidence_score"),
+                    entry = OrbEntry(
+                        id=uuid.uuid4(),
+                        upload_id=upload_id,
+                        vessel_id=vessel_id,
+                        entry_date=entry_date,
+                        orb_code=orb_code,
+                        item_number=entry_dict.get("item_number"),
+                        operation_description=entry_dict.get("operation_description", ""),
+                        tank_location=tank_location,
+                        time_start=entry_dict.get("time_start"),
+                        time_stop=entry_dict.get("time_stop"),
+                        position_start=entry_dict.get("position_start"),
+                        position_stop=entry_dict.get("position_stop"),
+                        officer_1_name=entry_dict.get("officer_1_name"),
+                        officer_1_rank=entry_dict.get("officer_1_rank"),
+                        officer_2_name=entry_dict.get("officer_2_name"),
+                        officer_2_rank=entry_dict.get("officer_2_rank"),
+                        raw_text=raw_text,
+                        confidence_score=entry_dict.get("confidence_score"),
+                    )
+                    db.add(entry)
+                    await db.flush()
+
+                    # ── 5. Post-process quantities
+                    seen_qty_keys: set[tuple] = set()
+                    for qty_dict in quantities_raw:
+                        qty_type = (
+                            qty_dict.get("qty_type")
+                            or qty_dict.get("type")
+                            or "retained"
                         )
-                        db.add(entry)
-                        await db.flush()
+                        raw_val = (
+                            qty_dict.get("qty_value")
+                            if qty_dict.get("qty_value") is not None
+                            else qty_dict.get("value")
+                            if qty_dict.get("value") is not None
+                            else qty_dict.get("amount")
+                            if qty_dict.get("amount") is not None
+                            else qty_dict.get("quantity")
+                        )
+                        if raw_val is None or raw_val == "":
+                            continue
+                        qty_value = float(raw_val)
+                        qty_unit = qty_dict.get("qty_unit", "m3")
 
-                        # ── 5. Post-process quantities
-                        seen_qty_keys: set[tuple] = set()
-                        for qty_dict in quantities_raw:
-                            qty_type = (
-                                qty_dict.get("qty_type")
-                                or qty_dict.get("type")
-                                or "retained"
-                            )
-                            # Gemini sometimes uses "value", "amount", or "quantity" instead of "qty_value"
-                            raw_val = (
-                                qty_dict.get("qty_value")
-                                if qty_dict.get("qty_value") is not None
-                                else qty_dict.get("value")
-                                if qty_dict.get("value") is not None
-                                else qty_dict.get("amount")
-                                if qty_dict.get("amount") is not None
-                                else qty_dict.get("quantity")
-                            )
-                            if raw_val is None or raw_val == "":
-                                continue
-                            qty_value = float(raw_val)
-                            qty_unit = qty_dict.get("qty_unit", "m3")
+                        qty_key = (qty_type, qty_value)
+                        if qty_key in seen_qty_keys:
+                            logger.info(f"Removed duplicate quantity {qty_key} in entry {entry.id}")
+                            continue
+                        seen_qty_keys.add(qty_key)
 
-                            # Dedup: skip if same (type, value) already added for this entry
-                            qty_key = (qty_type, qty_value)
-                            if qty_key in seen_qty_keys:
-                                logger.info(f"Removed duplicate quantity {qty_key} in entry {entry.id}")
-                                continue
-                            seen_qty_keys.add(qty_key)
+                        from_tank = qty_dict.get("from_tank") or tank_location
+                        to_tank = None if qty_type == "retained" else qty_dict.get("to_tank")
 
-                            # Backfill from_tank from entry tank_location when Gemini left it null
-                            from_tank = qty_dict.get("from_tank") or tank_location
+                        qty = OrbEntryQuantity(
+                            id=uuid.uuid4(),
+                            entry_id=entry.id,
+                            qty_type=qty_type,
+                            qty_value=qty_value,
+                            qty_unit=qty_unit,
+                            from_tank=from_tank,
+                            to_tank=to_tank,
+                        )
+                        db.add(qty)
 
-                            # retained quantities must never have a to_tank
-                            if qty_type == "retained":
-                                to_tank = None
-                            else:
-                                to_tank = qty_dict.get("to_tank")
-
-                            qty = OrbEntryQuantity(
-                                id=uuid.uuid4(),
-                                entry_id=entry.id,
-                                qty_type=qty_type,
-                                qty_value=qty_value,
-                                qty_unit=qty_unit,
-                                from_tank=from_tank,
-                                to_tank=to_tank,
-                            )
-                            db.add(qty)
-
+                    await db.flush()
                     entry_count += 1
                 except Exception as e:
                     logger.error(f"Failed to save entry: {e}")
                     errors.append(str(e)[:200])
+                    await db.rollback()
                     continue
 
             upload.status = "completed"

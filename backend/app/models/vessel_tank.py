@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import String, Float, Boolean, ForeignKey, UniqueConstraint
-from typing import Optional 
+from typing import Optional
 from sqlalchemy.orm import mapped_column, Mapped
 from sqlalchemy.dialects.postgresql import UUID
 from app.models.base import Base, TimestampMixin
@@ -21,3 +21,6 @@ class VesselTank(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     iopp_doc1_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     iopp_doc2_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    # NEW — required for Check 9 (Bilge Pump Capacity). Only meaningful on
+    # tanks where tank_group == 'BILGE'; NULL elsewhere.
+    bilge_pump_capacity_m3_per_hr: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
