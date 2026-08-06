@@ -17,6 +17,7 @@ class OrbUpload(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     total_pages: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    pages_processed: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=0)
     extracted_entries_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=0)
     # Duplicate detection
     file_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)

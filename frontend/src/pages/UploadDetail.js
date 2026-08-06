@@ -24,6 +24,14 @@ const COL_LABELS = [
   { key: 'bunker_grade',          label: 'Grade' },
 ];
 
+function formatDailyLogCell(value) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '—';
+    return value.map(v => `${v.tank_name}: ${v.value}`).join(', ');
+  }
+  return value ?? '—';
+}
+
 const SUMMARY_LABELS = [
   { key: 'total_sludge_retention',      label: 'Total Sludge Accumulation (m³)' },
   { key: 'sludge_accumulation_ratio',   label: 'Sludge Accum. / Fuel Consumed (%)' },
@@ -109,10 +117,12 @@ export default function UploadDetail() {
     padding: '0.6rem 1.2rem',
     cursor: 'pointer',
     borderBottom: activeTab === tab ? '3px solid var(--primary)' : '3px solid transparent',
+    borderTop: 'none',
+    borderLeft: 'none',
+    borderRight: 'none',
     fontWeight: activeTab === tab ? 700 : 400,
     color: activeTab === tab ? 'var(--primary)' : 'var(--text-secondary)',
     background: 'none',
-    border: 'none',
     fontSize: '0.95rem',
   });
 
@@ -320,7 +330,11 @@ export default function UploadDetail() {
           {activeTab === 'Daily Log' && (
             logLoading ? <LoadingSpinner /> : !dailyLog ? (
               <div style={{ color: 'var(--text-muted)', padding: '1rem' }}>No daily log data available.</div>
-            ) : (
+            ) : (() => {
+              const dailyRows = dailyLog.daily_rows || [];
+              const tankReference = dailyLog.tank_reference || [];
+              const monthlySummary = dailyLog.monthly_summary || {};
+              return (
               <>
                 {/* Table 1: Daily rows */}
                 <div className="card" style={{ marginBottom: '1.5rem' }}>
@@ -337,11 +351,11 @@ export default function UploadDetail() {
                         </tr>
                       </thead>
                       <tbody>
-                        {dailyLog.daily_rows.map((row, idx) => (
+                        {dailyRows.map((row, idx) => (
                           <tr key={row.date} style={{ background: idx % 2 === 0 ? '#f8fafc' : '#fff' }}>
                             {COL_LABELS.map(c => (
                               <td key={c.key} style={{ fontSize: '0.82rem', padding: '0.4rem 0.75rem', textAlign: c.key === 'date' || c.key === 'bunker_grade' ? 'left' : 'center' }}>
-                                {row[c.key] || '—'}
+                                {formatDailyLogCell(row[c.key])}
                               </td>
                             ))}
                           </tr>
@@ -350,7 +364,7 @@ export default function UploadDetail() {
                         <tr style={{ background: '#D6E4F0', fontWeight: 700 }}>
                           {COL_LABELS.map(c => (
                             <td key={c.key} style={{ fontSize: '0.82rem', padding: '0.5rem 0.75rem', textAlign: c.key === 'date' || c.key === 'bunker_grade' ? 'left' : 'center' }}>
-                              {c.key === 'date' ? 'TOTAL' : c.key === 'bunker_grade' ? '—' : (dailyLog.monthly_summary[c.key] || '—')}
+                              {c.key === 'date' ? 'TOTAL' : c.key === 'bunker_grade' ? '—' : (monthlySummary[c.key] || '—')}
                             </td>
                           ))}
                         </tr>
@@ -377,7 +391,7 @@ export default function UploadDetail() {
                         <tr style={{ background: '#E2EFDA', fontWeight: 700 }}>
                           {SUMMARY_LABELS.map(c => (
                             <td key={c.key} style={{ fontSize: '0.85rem', padding: '0.6rem 0.75rem', textAlign: 'center' }}>
-                              {dailyLog.monthly_summary[c.key] ?? '—'}
+                              {monthlySummary[c.key] ?? '—'}
                             </td>
                           ))}
                         </tr>
@@ -402,7 +416,7 @@ export default function UploadDetail() {
                         </tr>
                       </thead>
                       <tbody>
-                        {dailyLog.tank_reference.map((t, idx) => (
+                        {tankReference.map((t, idx) => (
                           <tr key={t.tank_code} style={{ background: idx % 2 === 0 ? '#f8fafc' : '#fff' }}>
                             <td style={{ fontSize: '0.85rem' }}>{t.tank_code}</td>
                             <td style={{ fontSize: '0.85rem' }}>{t.tank_name}</td>
@@ -426,7 +440,7 @@ export default function UploadDetail() {
                         <tr style={{ background: '#D6E4F0', fontWeight: 700 }}>
                           <td colSpan={3}>SUBTOTAL</td>
                           <td style={{ textAlign: 'center' }}>
-                            {dailyLog.tank_reference.reduce((s, t) => s + t.capacity_m3, 0).toFixed(2)}
+                            {tankReference.reduce((s, t) => s + t.capacity_m3, 0).toFixed(2)}
                           </td>
                           <td colSpan={2}></td>
                         </tr>
@@ -435,7 +449,8 @@ export default function UploadDetail() {
                   </div>
                 </div>
               </>
-            )
+              );
+            })()
           )}
 
         </div>

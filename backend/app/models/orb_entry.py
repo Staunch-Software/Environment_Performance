@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 from typing import Optional
-from sqlalchemy import String, Text, Float, Date, Boolean, ForeignKey
+from sqlalchemy import String, Text, Float, Date, Boolean, Integer, ForeignKey
 from sqlalchemy.orm import mapped_column, Mapped
 from sqlalchemy.dialects.postgresql import UUID
 from app.models.base import Base, TimestampMixin
@@ -31,3 +31,5 @@ class OrbEntry(Base, TimestampMixin):
     confidence_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     master_signature_present: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     has_erasure: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    page_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    has_gap_before: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)

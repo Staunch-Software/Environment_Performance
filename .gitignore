@@ -32,6 +32,8 @@ dist/
 backend/uploads/
 uploads/
 *.log
+backend/extraction_debug/
+extraction_debug/
 
 # ── Editor / OS ────────────────────────────────────────
 .vscode/

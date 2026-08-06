@@ -45,6 +45,18 @@ class Settings(BaseSettings):
     # scraper. Defaults to a file named vessels.txt in the backend root.
     WNI_VESSELS_FILE: str = "vessels.txt"
 
+    # ── Extraction debug dump ───────────────────────────────────────────────
+    # When set, each ORB extraction run writes one subfolder per upload here
+    # containing: every image actually sent to Gemini (post-split, exactly as
+    # seen by the model), the raw JSON response for each page, and a
+    # manifest.json recording each page's stacked-pair split decision
+    # (page_count / split_y_fraction) and its final page_number. Without this,
+    # diagnosing a specific page's failure means guessing where the real
+    # split boundary landed -- this makes it exact instead. Empty (default)
+    # disables the dump entirely; this is diagnostic-only and never read by
+    # the extraction logic itself.
+    EXTRACTION_DEBUG_DIR: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
