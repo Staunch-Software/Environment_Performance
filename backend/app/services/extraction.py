@@ -412,6 +412,25 @@ from_tank and to_tank rules:
     For retained, capacity, disposed, incinerated, evaporated — to_tank MUST be null.
   - Do NOT copy the source tank into to_tank for retained quantities.
 
+  DO NOT LET A SECOND TANK NAME ELSEWHERE IN THE BLOCK BLEED ONTO A DIFFERENT FIGURE'S
+  from_tank: when a block mentions TWO tanks (e.g. a Code C 11.1 sounding of tank A whose text
+  also has an 11.4 "collected from tank B" clause, or a Code D transfer FROM tank A TO tank B),
+  each individual quantity's from_tank must be the tank THAT SPECIFIC figure is actually about —
+  never defaulted to whichever tank name happens to appear elsewhere in the same block's text.
+  Confirmed in production, twice on the same page: (1) a Code C 11.1 sounding of "OILY BILGE
+  TANK" (capacity 25.6 m3, retained 4.3 m3 — both figures unambiguously about Oily Bilge Tank
+  itself, matching its own known capacity) also had an 11.4 clause "2.5 m3 COLLECTION OF BILGE
+  WATER FROM BILGE HOLDING TANK" — the capacity AND retained figures both got mistagged
+  from_tank="BILGE HOLDING TANK" (the OTHER tank named later in the block) instead of "OILY
+  BILGE TANK" (the tank they actually describe); only the 11.4 collected figure genuinely
+  belongs to Bilge Holding Tank. (2) A Code D transfer "FROM Bilge Holding Tank ... TRANSFERRED
+  TO Oily Bilge Tank ... CAP: 89.2 m3" had the capacity figure (89.2 m3, Bilge Holding Tank's
+  own well-established capacity) mistagged from_tank="OILY BILGE TANK" (Oily Bilge Tank's real
+  capacity is 25.6 m3, nothing like 89.2) simply because "Oily Bilge Tank" was the nearest tank
+  name stated in the text before it. Before assigning from_tank on any individual quantity, ask
+  specifically WHICH tank that number is a reading of/movement out of — not which tank name most
+  recently appeared in the sentence.
+
 Quantity mapping by item/operation type:
   11.1 (sounding start) → capacity + retained for that tank
   11.2 → capacity quantity only
@@ -2208,19 +2227,28 @@ async def extract_with_gemini(
                 # cut off (e.g. only a bare Code letter was visible). Split it into
                 # its own entry instead of merging two tanks' quantities together.
                 #
-                # A capacity reading landing on a NON-Code-C prev_entry is an even
-                # stronger signal of the same underlying mistake: a capacity value
-                # only ever legitimately belongs to a Code C 11.x sounding block (or
-                # the equivalent Code I weekly inventory), never to a Code D/E/F/G/H
-                # entry. Seen in production: a page's own last row ("02-APR-2026 C
-                # 11.1 L.O SLUDGE TANK") was skipped entirely by the model, so this
-                # continuation's capacity/retained/collected figures found no real
-                # Code C entry to attach to and got silently merged into an
-                # unrelated Code D bilge-pumping entry from the prior page instead
-                # -- corrupting that entry's data AND losing the sludge-tank entry
-                # completely. Splitting into its own entry preserves the data even
-                # when the true preceding entry was dropped outright.
-                if cont_qtys and _has_capacity(cont_qtys) and (_has_capacity(prev_qtys) or prev_entry.get("orb_code") != "C"):
+                # NOTE: this used to ALSO split whenever prev_entry's own code was
+                # anything other than "C", on the theory that "a capacity value
+                # only ever legitimately belongs to a Code C 11.x sounding block,
+                # never to a Code D/E/F/G/H entry." That theory is wrong per the
+                # ORB's own structure: IMO guidance (MEPC.1/Circ.736/Rev.1, Example
+                # #12) shows a Code D bilge-pumping block's own item 15.x line
+                # legitimately stating "Capacity xx m3, xx m3 retained" for the
+                # DESTINATION tank as part of that SAME entry -- and this is in
+                # fact the single most common continuation shape in this whole
+                # document (nearly every Code D block's tail reads "...TO BILGE
+                # HOLDING TANK. CAP: 89.2 m3 RETD: X m3"). Confirmed in production:
+                # once the boundary-recheck mechanisms got better at actually
+                # recovering these tails (see _detect_orphaned_last_entry), this
+                # rule started wrongly splitting a large fraction of genuine Code D
+                # continuations into fake standalone "Code C 11.1" entries labelled
+                # with the SOURCE tank name (e.g. "C 11.1 E/R BILGE WELLS") instead
+                # of correctly closing out the real Code D entry -- silently
+                # doubling the entry count on every affected page. Only a prev_entry
+                # that ALREADY has its own capacity reading is still a genuine
+                # same-slot conflict (two tanks' capacity values can't coexist in
+                # one sounding); that narrower signal is kept.
+                if cont_qtys and _has_capacity(cont_qtys) and _has_capacity(prev_qtys):
                     # Tell apart a genuine per-tank C.11.x sounding continuation
                     # from this vessel's Code I "weekly inventory" remark, which
                     # also carries a capacity+retained pair despite being Code I
