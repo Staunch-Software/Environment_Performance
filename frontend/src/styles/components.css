@@ -432,7 +432,7 @@ tbody td { padding: 0.7rem 1rem; font-size: 0.875rem; vertical-align: middle; }
 /* Keep zebra background visible on sticky date cells */
 .daily-log-table tbody tr:nth-child(even) td.col-date { background: #f8fafc; }
 .daily-log-table tbody tr:nth-child(odd)  td.col-date { background: #fff; }
-.daily-log-table tbody tr:hover td.col-date { background: inherit; }
+.daily-log-table tbody tr:hover td.col-date { background: var(--info-light); }
 
 .daily-log-table td {
   padding: 0.4rem 0.75rem;
@@ -443,7 +443,7 @@ tbody td { padding: 0.7rem 1rem; font-size: 0.875rem; vertical-align: middle; }
 .daily-log-table td.col-grade { text-align: left; }
 .daily-log-table tbody tr:nth-child(even) { background: #f8fafc; }
 .daily-log-table tbody tr:nth-child(odd)  { background: #fff; }
-.daily-log-table tbody tr:hover { background: inherit; }
+.daily-log-table tbody tr:hover { background: var(--info-light); }
 
 /* Single-line tank row: NAME   VALUE   PCT% */
 .tank-cell { display: flex; flex-direction: column; gap: 0.3rem; min-width: 200px; text-align: left; }
