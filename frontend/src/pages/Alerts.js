@@ -51,10 +51,11 @@ export default function Alerts() {
 
   useEffect(() => { api.get('/api/vessels').then(r => setVessels(r.data.data || [])); }, []);
 
-  const load = () => {
+  const load = (overrides = {}) => {
     setLoading(true);
+    const activeFilters = { ...filters, ...overrides };
     const params = new URLSearchParams();
-    Object.entries(filters).forEach(([k, v]) => {
+    Object.entries(activeFilters).forEach(([k, v]) => {
       if (Array.isArray(v)) v.forEach(item => params.append(k, item));
       else if (v !== '') params.append(k, v);
     });
@@ -70,6 +71,12 @@ export default function Alerts() {
   useEffect(() => { load(); }, []);
 
   const setFilter = (k, v) => setFilters(f => ({ ...f, [k]: v }));
+
+  const handleSeverityClick = (s) => {
+    const newSeverity = filters.severity === s ? '' : s;
+    setFilters(f => ({ ...f, severity: newSeverity }));
+    load({ severity: newSeverity });
+  };
 
   const toggleExpand = async (alert) => {
     if (expandedId === alert.id) { setExpandedId(null); return; }
@@ -119,7 +126,18 @@ export default function Alerts() {
 
           <div className="severity-bar">
             {SEVERITIES.map(s => (
-              <div key={s} className="severity-chip" style={{ background: CHIP_COLORS[s].bg, color: CHIP_COLORS[s].color }}>
+              <div
+                key={s}
+                className="severity-chip"
+                onClick={() => handleSeverityClick(s)}
+                style={{
+                  background: CHIP_COLORS[s].bg,
+                  color: CHIP_COLORS[s].color,
+                  cursor: 'pointer',
+                  outline: filters.severity === s ? `2px solid ${CHIP_COLORS[s].color}` : 'none',
+                  outlineOffset: '2px',
+                }}
+              >
                 <span className="count">{summary[s] || 0}</span>
                 <span style={{ textTransform: 'capitalize' }}>{s}</span>
               </div>
