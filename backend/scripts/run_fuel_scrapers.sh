@@ -3,7 +3,7 @@
 # Intended to be triggered by cron on the deployment VM.
 set -euo pipefail
 
-BACKEND_DIR="/path/to/Environment_Performance/backend"   # <-- set this to the real path on the VM
+BACKEND_DIR="/opt/orb-platform/backend"
 VENV_PYTHON="$BACKEND_DIR/venv/bin/python"
 LOG_DIR="$BACKEND_DIR/logs"
 LOCK_FILE="/tmp/fuel_scrapers.lock"
