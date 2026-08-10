@@ -12,6 +12,7 @@ class UploadResponse(BaseModel):
     uploaded_by: uuid.UUID
     original_filename: str
     storage_path: str
+    pdf_blob_url: Optional[str] = None
     status: str
     error_message: Optional[str] = None
     total_pages: Optional[int] = None

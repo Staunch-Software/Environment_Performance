@@ -7,10 +7,10 @@ from app.config import get_settings
 settings = get_settings()
 
 
-async def upload_iopp_document(content: bytes, filename: str, content_type: str) -> str:
-    """Upload a file to the configured Azure Blob container and return its URL."""
+async def _upload_document(content: bytes, filename: str, content_type: str, container_name: str) -> str:
+    """Upload a file to the given Azure Blob container and return its URL."""
     client = BlobServiceClient.from_connection_string(settings.AZURE_STORAGE_CONNECTION_STRING)
-    container = client.get_container_client(settings.AZURE_STORAGE_CONTAINER)
+    container = client.get_container_client(container_name)
     try:
         container.create_container()
     except Exception:
@@ -20,6 +20,16 @@ async def upload_iopp_document(content: bytes, filename: str, content_type: str)
     blob = container.get_blob_client(blob_name)
     blob.upload_blob(content, overwrite=True, content_settings=ContentSettings(content_type=content_type))
     return blob.url
+
+
+async def upload_iopp_document(content: bytes, filename: str, content_type: str) -> str:
+    """Upload a file to the configured Azure Blob container and return its URL."""
+    return await _upload_document(content, filename, content_type, settings.AZURE_STORAGE_CONTAINER)
+
+
+async def upload_orb_pdf(content: bytes, filename: str) -> str:
+    """Upload an original ORB logbook PDF to blob storage (for later preview) and return its URL."""
+    return await _upload_document(content, filename, "application/pdf", settings.AZURE_STORAGE_ORB_CONTAINER)
 
 
 async def download_iopp_document(blob_url: str) -> tuple[bytes, str]:

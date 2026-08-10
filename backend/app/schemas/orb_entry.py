@@ -37,6 +37,7 @@ class EntryResponse(BaseModel):
     officer_2_rank: Optional[str] = None
     raw_text: Optional[str] = None
     confidence_score: Optional[float] = None
+    page_number: Optional[int] = None
     created_at: datetime
     updated_at: datetime
     quantities: List[QuantityResponse] = []

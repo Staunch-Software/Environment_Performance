@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, CheckCircle } from 'lucide-react';
+import { Upload, CheckCircle, FileText } from 'lucide-react';
 import Sidebar from '../components/Layout/Sidebar';
 import Header from '../components/Layout/Header';
 import Table from '../components/shared/Table';
@@ -29,6 +29,7 @@ export default function Uploads() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
   const fileRef = useRef();
+  const [preview, setPreview] = useState(null); // { filename, url, loading }
 
   const load = (silent = false) => {
     const params = new URLSearchParams();
@@ -104,6 +105,23 @@ export default function Uploads() {
     }
   };
 
+  const openPreview = async (uploadId, filename) => {
+    setPreview({ filename, url: null, loading: true });
+    try {
+      const res = await api.get(`/api/uploads/${uploadId}/pdf`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(res.data);
+      setPreview({ filename, url, loading: false });
+    } catch (e) {
+      toast({ message: 'Could not load PDF preview.', type: 'error' });
+      setPreview(null);
+    }
+  };
+
+  const closePreview = () => {
+    if (preview?.url) window.URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  };
+
   const downloadFile = async (uploadId, type, filename) => {
     const res = await api.get(`/api/uploads/${uploadId}/export/${type}`, { responseType: 'blob' });
     const url = window.URL.createObjectURL(res.data);
@@ -158,9 +176,16 @@ export default function Uploads() {
     },
     { key: 'created_at', label: 'Uploaded', render: (r) => new Date(r.created_at).toLocaleDateString() },
     {
-      key: 'actions', label: 'Actions',
+      key: 'actions', label: 'Actions', align: 'center',
       render: (r) => (
-        <div className="row-actions">
+        <div className="row-actions" style={{ justifyContent: 'center' }}>
+          <button
+            className="btn-icon"
+            title="Preview original PDF"
+            onClick={(e) => { e.stopPropagation(); openPreview(r.id, r.original_filename); }}
+          >
+            <FileText size={16} />
+          </button>
           <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); navigate(`/uploads/${r.id}`); }}>
             View
           </button>
@@ -276,6 +301,20 @@ export default function Uploads() {
                 AI extraction is running in the background. The upload list will update automatically — you can close this and continue working.
               </p>
             </div>
+          )}
+        </Modal>
+      )}
+
+      {preview && (
+        <Modal title={preview.filename} onClose={closePreview} xwide>
+          {preview.loading ? (
+            <LoadingSpinner />
+          ) : (
+            <iframe
+              src={preview.url}
+              title={preview.filename}
+              style={{ width: '100%', height: '100%', minHeight: '75vh', border: 'none', display: 'block' }}
+            />
           )}
         </Modal>
       )}

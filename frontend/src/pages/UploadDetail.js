@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { FileText } from 'lucide-react';
 import Sidebar from '../components/Layout/Sidebar';
 import Header from '../components/Layout/Header';
 import Badge from '../components/shared/Badge';
+import Modal from '../components/shared/Modal';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import api from '../api/axios';
 
@@ -55,6 +57,7 @@ export default function UploadDetail() {
   const [loading, setLoading] = useState(true);
   const [logLoading, setLogLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('Entries');
+  const [preview, setPreview] = useState(null); // { url, loading }
 
   const load = async () => {
     setLoading(true);
@@ -94,6 +97,22 @@ export default function UploadDetail() {
   const resolveAlert = async (alertId) => {
     await api.patch(`/api/alerts/${alertId}/resolve`, { notes: '' });
     load();
+  };
+
+  const openPreview = async () => {
+    setPreview({ url: null, loading: true });
+    try {
+      const res = await api.get(`/api/uploads/${id}/pdf`, { responseType: 'blob' });
+      setPreview({ url: window.URL.createObjectURL(res.data), loading: false });
+    } catch (e) {
+      console.error('PDF preview load failed', e);
+      setPreview(null);
+    }
+  };
+
+  const closePreview = () => {
+    if (preview?.url) window.URL.revokeObjectURL(preview.url);
+    setPreview(null);
   };
 
   const downloadFile = async (type) => {
@@ -238,12 +257,18 @@ export default function UploadDetail() {
                     </div>
                   )}
                 </div>
-                {upload.status === 'completed' && (
-                  <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    <button className="btn btn-secondary" onClick={() => downloadFile('excel')}>Download Excel</button>
-                    <button className="btn btn-secondary" onClick={() => downloadFile('pdf')}>Download PDF</button>
-                  </div>
-                )}
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button className="btn btn-secondary" onClick={openPreview}>
+                    <FileText size={15} style={{ marginRight: '0.35rem', verticalAlign: 'text-bottom' }} />
+                    Preview PDF
+                  </button>
+                  {upload.status === 'completed' && (
+                    <>
+                      <button className="btn btn-secondary" onClick={() => downloadFile('excel')}>Download Excel</button>
+                      <button className="btn btn-secondary" onClick={() => downloadFile('pdf')}>Download PDF</button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -272,7 +297,7 @@ export default function UploadDetail() {
                   <thead>
                     <tr>
                       <th>Date</th><th>Code</th><th>Item</th><th>Operation</th>
-                      <th>Quantities</th><th>Tank / Location</th><th>Officer 1</th><th>Confidence</th>
+                      <th>Quantities</th><th>Tank / Location</th><th>Officer 1</th><th>Page</th><th>Confidence</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -287,6 +312,7 @@ export default function UploadDetail() {
                         </td>
                         <td>{e.tank_location || '—'}</td>
                         <td style={{ fontSize: '0.8rem' }}>{e.officer_1_name ? `${e.officer_1_name} (${e.officer_1_rank || ''})` : '—'}</td>
+                        <td style={{ fontSize: '0.8rem', textAlign: 'center' }}>{e.page_number ?? '—'}</td>
                         <td>
                           <span style={{
                             color: e.confidence_score < 0.75 ? 'var(--danger)' : 'var(--success)',
@@ -318,6 +344,9 @@ export default function UploadDetail() {
                   <div>
                     <Badge value={a.severity} />
                     <span style={{ marginLeft: '0.5rem', fontSize: '0.85rem' }}>{a.alert_type.replace(/_/g, ' ')}</span>
+                    {a.page_number != null && (
+                      <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>· Page {a.page_number}</span>
+                    )}
                     <p style={{ fontSize: '0.85rem', marginTop: '0.25rem', color: 'var(--text-secondary)' }}>{a.message}</p>
                   </div>
                   <button className="btn btn-ghost btn-sm" onClick={() => resolveAlert(a.id)}>Resolve</button>
@@ -455,6 +484,20 @@ export default function UploadDetail() {
 
         </div>
       </div>
+
+      {preview && (
+        <Modal title={upload?.original_filename || 'PDF Preview'} onClose={closePreview} xwide>
+          {preview.loading ? (
+            <LoadingSpinner />
+          ) : (
+            <iframe
+              src={preview.url}
+              title="PDF Preview"
+              style={{ width: '100%', height: '100%', minHeight: '75vh', border: 'none', display: 'block' }}
+            />
+          )}
+        </Modal>
+      )}
     </div>
   );
 }

@@ -198,13 +198,13 @@ export default function Alerts() {
               <table>
                 <thead>
                   <tr>
-                    <th>Severity</th><th>Vessel</th><th>Type</th><th>Message</th>
+                    <th>Severity</th><th>Vessel</th><th>Type</th><th>Message</th><th>Page</th>
                     <th>Created</th><th>Status</th><th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {alerts.length === 0 ? (
-                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No alerts found.</td></tr>
+                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No alerts found.</td></tr>
                   ) : alerts.map(a => {
                     const expanded = expandedId === a.id;
                     const entry = a.entry_id ? entryCache[a.entry_id] : null;
@@ -215,6 +215,7 @@ export default function Alerts() {
                           <td style={{ fontSize: '0.85rem' }}>{vessels.find(v => v.id === a.vessel_id)?.name || '—'}</td>
                           <td style={{ fontSize: '0.8rem' }}>{a.alert_type.replace(/_/g, ' ')}</td>
                           <td style={{ maxWidth: 320, fontSize: '0.85rem' }}>{a.message}</td>
+                          <td style={{ fontSize: '0.8rem', textAlign: 'center' }}>{a.page_number ?? '—'}</td>
                           <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                             {new Date(a.created_at).toLocaleDateString()}
                             {!a.is_resolved && (() => {
@@ -240,7 +241,7 @@ export default function Alerts() {
                         </tr>
                         {expanded && (
                           <tr key={`${a.id}-exp`} ref={expandedRowRef} style={{ background: '#f8fafc' }}>
-                            <td colSpan={7} style={{ padding: '1rem 2rem' }}>
+                            <td colSpan={8} style={{ padding: '1rem 2rem' }}>
                               {!a.entry_id ? (
                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                                   No specific entry — this is a vessel-level aggregate alert.

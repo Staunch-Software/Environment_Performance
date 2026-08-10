@@ -10,6 +10,7 @@ class AlertResponse(BaseModel):
     id: uuid.UUID
     vessel_id: uuid.UUID
     entry_id: Optional[uuid.UUID] = None
+    page_number: Optional[int] = None
     alert_type: str
     severity: str
     message: str

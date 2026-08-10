@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     # Azure Blob Storage — stores IOPP tank certificate/survey documents.
     AZURE_STORAGE_CONNECTION_STRING: str = ""
     AZURE_STORAGE_CONTAINER: str = "iopp-documents"
+    # Separate container for original ORB upload PDFs (preview feature).
+    AZURE_STORAGE_ORB_CONTAINER: str = "orb-uploads"
 
     # ── WNI Fuel Scraper (Check 7 support) ─────────────────────────────────
     # Separate, standalone scraper — see app/scrapers/wni_fuel_scraper.py.

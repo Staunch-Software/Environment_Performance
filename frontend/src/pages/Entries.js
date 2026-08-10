@@ -84,12 +84,12 @@ export default function Entries() {
                 <thead>
                   <tr>
                     <th>Date</th><th>Code</th><th>Item</th><th>Operation</th>
-                    <th>Tank/Location</th><th>Officers</th><th>Confidence</th>
+                    <th>Tank/Location</th><th>Officers</th><th>Page</th><th>Confidence</th>
                   </tr>
                 </thead>
                 <tbody>
                   {entries.length === 0 ? (
-                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No entries found.</td></tr>
+                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No entries found.</td></tr>
                   ) : entries.map(e => (
                     <Fragment key={e.id}>
                       <tr
@@ -103,6 +103,7 @@ export default function Entries() {
                         <td style={{ maxWidth: 280 }}>{e.operation_description}</td>
                         <td>{e.tank_location || '—'}</td>
                         <td style={{ fontSize: '0.8rem' }}>{e.officer_1_name || '—'}</td>
+                        <td style={{ fontSize: '0.8rem', textAlign: 'center' }}>{e.page_number ?? '—'}</td>
                         <td>
                           {e.confidence_score != null ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

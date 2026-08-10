@@ -1,9 +1,10 @@
 import uuid
 import os
 import hashlib
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 import io
@@ -21,6 +22,7 @@ from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 @router.get("")
@@ -85,12 +87,24 @@ async def create_upload(
     with open(storage_path, "wb") as f:
         f.write(content)
 
+    # Best-effort: also persist the original PDF to Azure Blob Storage so it can
+    # be previewed later. If blob storage is unavailable, the upload still
+    # proceeds — the preview endpoint falls back to the local storage_path.
+    pdf_blob_url = None
+    if settings.AZURE_STORAGE_CONNECTION_STRING:
+        try:
+            from app.services.azure_storage import upload_orb_pdf
+            pdf_blob_url = await upload_orb_pdf(content, file.filename)
+        except Exception:
+            logger.exception("Failed to upload ORB PDF %s to blob storage", file.filename)
+
     upload = OrbUpload(
         id=upload_id,
         vessel_id=vessel_id,
         uploaded_by=current_user.id,
         original_filename=file.filename,
         storage_path=storage_path,
+        pdf_blob_url=pdf_blob_url,
         status="pending",
         extracted_entries_count=0,
         file_hash=file_hash,
@@ -127,6 +141,46 @@ async def get_upload(
     data["vessel_name"] = vessel.name if vessel else None
     data["uploader_name"] = uploader.name if uploader else None
     return success(data=data)
+
+
+@router.get("/{upload_id}/pdf")
+async def get_upload_pdf(
+    upload_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Stream the original uploaded PDF back for in-app preview.
+
+    Prefers the local storage_path (fast, and always written on upload) and
+    only falls back to Azure Blob Storage (a network round-trip, several
+    seconds slower) if the local copy is missing -- e.g. a different server
+    instance than the one that handled the original upload.
+    """
+    result = await db.execute(select(OrbUpload).where(OrbUpload.id == upload_id))
+    upload = result.scalar_one_or_none()
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found")
+
+    if upload.storage_path and os.path.exists(upload.storage_path):
+        with open(upload.storage_path, "rb") as f:
+            content = f.read()
+        content_type = "application/pdf"
+    elif upload.pdf_blob_url:
+        from app.services.azure_storage import download_iopp_document
+        content, content_type = await download_iopp_document(upload.pdf_blob_url)
+    else:
+        raise HTTPException(status_code=404, detail="Original PDF is no longer available")
+
+    # Plain Response, not StreamingResponse: the content is already fully in
+    # memory, and StreamingResponse iterates a raw BytesIO line-by-line
+    # (splitting on \n bytes) rather than in fixed chunks -- binary PDFs are
+    # full of 0x0A bytes, so that turns a few-MB file into tens of thousands
+    # of tiny awaited chunks and inflates response time by orders of magnitude.
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": f'inline; filename="{upload.original_filename}"'},
+    )
 
 
 @router.get("/{upload_id}/entries")

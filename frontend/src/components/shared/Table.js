@@ -9,7 +9,7 @@ export default function Table({ columns, data, onRowClick, rowKey = 'id', rowCla
         <thead>
           <tr>
             {columns.map((col) => (
-              <th key={col.key || col.label}>{col.label}</th>
+              <th key={col.key || col.label} style={col.align ? { textAlign: col.align } : undefined}>{col.label}</th>
             ))}
           </tr>
         </thead>
@@ -22,7 +22,7 @@ export default function Table({ columns, data, onRowClick, rowKey = 'id', rowCla
               className={rowClassName ? rowClassName(row) : undefined}
             >
               {columns.map((col) => (
-                <td key={col.key || col.label}>
+                <td key={col.key || col.label} style={col.align ? { textAlign: col.align } : undefined}>
                   {col.render ? col.render(row) : row[col.key]}
                 </td>
               ))}

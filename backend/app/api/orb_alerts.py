@@ -7,6 +7,7 @@ from sqlalchemy import select, func, delete
 
 from app.database import get_db
 from app.models.orb_alert import OrbAlert
+from app.models.orb_entry import OrbEntry
 from app.models.orb_upload import OrbUpload
 from app.models.user import User
 from app.schemas.orb_alert import AlertResponse, ResolveRequest, AlertSummary
@@ -51,7 +52,11 @@ async def list_alerts(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    q = select(OrbAlert).order_by(OrbAlert.created_at.desc())
+    q = (
+        select(OrbAlert, OrbEntry.page_number)
+        .outerjoin(OrbEntry, OrbAlert.entry_id == OrbEntry.id)
+        .order_by(OrbAlert.created_at.desc())
+    )
     if vessel_id:
         q = q.where(OrbAlert.vessel_id.in_(vessel_id))
     if severity:
@@ -62,8 +67,13 @@ async def list_alerts(
         q = q.where(OrbAlert.alert_type == alert_type)
 
     result = await db.execute(q)
-    alerts = result.scalars().all()
-    return success(data=[AlertResponse.model_validate(a).model_dump() for a in alerts])
+    rows = result.all()
+    data = []
+    for alert, page_number in rows:
+        d = AlertResponse.model_validate(alert).model_dump()
+        d["page_number"] = page_number
+        data.append(d)
+    return success(data=data)
 
 
 @router.get("/{alert_id}")
@@ -72,11 +82,18 @@ async def get_alert(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(OrbAlert).where(OrbAlert.id == alert_id))
-    alert = result.scalar_one_or_none()
-    if not alert:
+    result = await db.execute(
+        select(OrbAlert, OrbEntry.page_number)
+        .outerjoin(OrbEntry, OrbAlert.entry_id == OrbEntry.id)
+        .where(OrbAlert.id == alert_id)
+    )
+    row = result.first()
+    if not row:
         raise HTTPException(status_code=404, detail="Alert not found")
-    return success(data=AlertResponse.model_validate(alert).model_dump())
+    alert, page_number = row
+    d = AlertResponse.model_validate(alert).model_dump()
+    d["page_number"] = page_number
+    return success(data=d)
 
 
 @router.post("/recalculate")

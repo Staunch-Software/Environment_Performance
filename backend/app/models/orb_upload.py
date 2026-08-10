@@ -14,6 +14,9 @@ class OrbUpload(Base, TimestampMixin):
     uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    # Azure Blob Storage URL for the original PDF, used to preview it in the UI.
+    # Nullable: older uploads (pre-blob-storage) fall back to storage_path on disk.
+    pdf_blob_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     total_pages: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

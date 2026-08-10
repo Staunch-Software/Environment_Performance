@@ -452,6 +452,17 @@ Quantity mapping by item/operation type:
   12.1 → disposed (from sludge tank to shore) + retained (remaining in tank)
   12.2 → transferred (from tank A to tank B) + retained (what stays in source tank)
          + optionally retained (new level in destination tank)
+
+  IMPORTANT — 12.2 WITH TWO "RETAINED" FIGURES: when the text gives a retained
+  reading for BOTH tanks (e.g. "...0.2 M3 RETAINED IN TANK, TRANSFERRED TO
+  BILGE SEPARATED OIL TANK, 11.6 M3 RETAINED IN TANK"), the two retained
+  quantities are NOT the same tank. The first retained figure (stated before
+  "TRANSFERRED TO") belongs to the SOURCE tank (from the transferred
+  quantity's from_tank). The second retained figure (stated after
+  "TRANSFERRED TO <tank>") belongs to that DESTINATION tank -- set its
+  from_tank explicitly to the destination tank name, never to the source
+  tank. Do not leave from_tank null on this second retained quantity and
+  rely on it defaulting to the source tank.
   12.3 → incinerated + retained
   12.4 → evaporated + retained
   Code D block (items 13/14/15.x) — ENTIRE block = ONE entry:
@@ -670,8 +681,10 @@ def get_mock_data(vessel_id: uuid.UUID, upload_id: uuid.UUID) -> list[dict]:
                  "from_tank": "Bilge Holding Tank", "to_tank": "Bilge Separated Oil Tank"},
                 {"qty_type": "retained", "qty_value": 5.30, "qty_unit": "m3",
                  "from_tank": "Bilge Holding Tank", "to_tank": None},
+                {"qty_type": "retained", "qty_value": 11.60, "qty_unit": "m3",
+                 "from_tank": "Bilge Separated Oil Tank", "to_tank": None},
             ],
-            "raw_text": "12.2 Transfer BHT to BSOT: 3.20 m3, retained 5.30 m3",
+            "raw_text": "12.2 Transfer BHT to BSOT: 3.20 m3, 5.30 m3 retained in tank, transferred to BSOT, 11.60 m3 retained in tank",
             "confidence_score": 0.90,
             "page_number": 1,
             "has_gap_before": True,
@@ -2209,6 +2222,16 @@ async def extract_with_gemini(
                     leading_continuation = recheck_result
                 elif recheck_result:
                     logger.info(f"Page {page_num}: {recheck_source} re-check returned only empty/trivial content -- ignoring")
+            # Needed below: an entry that starts near the bottom of page N can have
+            # its officer names/signature line actually sitting at the TOP of page
+            # N+1 (a leading continuation), before page N+1's own first entry
+            # begins. The prompt only asks the model for one master_signature_present
+            # value per page, so that continuation fragment doesn't carry its own
+            # signature flag -- but if page N+1 itself reports a signature present,
+            # it's reasonable to attribute it to the entry whose tail (and signature
+            # block) physically live on this page, not just to page N+1's own entries.
+            current_page_signed = bool(page_data.get("master_signature_present", False))
+
             if leading_continuation and prev_entry:
                 text = (leading_continuation.get("text") or "").strip()
                 cont_qtys_raw = leading_continuation.get("quantities") or []
@@ -2280,6 +2303,7 @@ async def extract_with_gemini(
                         # counter over the PDF's actual pages and can't drift.
                         "page_number": page_num,
                         "is_continuation": False,
+                        "master_signature_present": current_page_signed,
                     }
                     all_entries.append(new_entry)
                     logger.info(f"Page {page_num}: leading continuation carried a second tank's capacity reading -- split into its own entry instead of merging into previous entry")
@@ -2308,6 +2332,15 @@ async def extract_with_gemini(
                                   "tank_location", "time_start", "time_stop",
                                   "position_start", "position_stop"):
                         prev_entry[field] = prev_entry.get(field) or leading_continuation.get(field)
+                    # prev_entry's master_signature_present was already fixed to page
+                    # N's own (often False) value when page N was processed. If this
+                    # entry's tail -- and its officer signature -- turned out to
+                    # actually live on page N+1 (this page), and page N+1 itself has
+                    # a detected signature, credit it to prev_entry rather than
+                    # leaving it permanently stuck at page N's false/absent reading.
+                    prev_entry["master_signature_present"] = (
+                        bool(prev_entry.get("master_signature_present")) or current_page_signed
+                    )
                     if cont_qtys and not already_present:
                         prev_qty_keys = {_qty_signature(q) for q in prev_qtys}
                         new_qtys = [q for q in cont_qtys if _qty_signature(q) not in prev_qty_keys]
@@ -4045,6 +4078,29 @@ async def run_extraction(
                         elif has_113 and not has_112:
                             single_qty_type_override = "retained"
 
+                    # For a transfer/bunkering entry (12.2, Code D 15.3, 26.3/26.4) the
+                    # ORB text can carry TWO "retained" figures -- one for the source
+                    # tank, one for the destination tank after it receives the
+                    # transfer. The model doesn't always stamp an explicit from_tank
+                    # on that second (destination) retained figure, so if we blindly
+                    # fall back to the entry's own tank_location (the source tank) for
+                    # every unstamped retained quantity, the destination tank's retained
+                    # reading gets silently misattributed to the source tank -- which
+                    # then gets compared against the wrong tank's capacity downstream.
+                    # Once a transferred/bunkered to_tank is known for this entry, any
+                    # retained figure AFTER the first one defaults to that destination
+                    # tank instead of tank_location when the model left from_tank blank.
+                    transfer_to_tank = next(
+                        (
+                            qd.get("to_tank")
+                            for qd in quantities_raw
+                            if (qd.get("qty_type") or qd.get("type")) in ("transferred", "bunkered")
+                            and qd.get("to_tank")
+                        ),
+                        None,
+                    )
+                    retained_seen_count = 0
+
                     seen_qty_keys: set[tuple] = set()
                     for qty_dict in quantities_raw:
                         qty_type = (
@@ -4086,7 +4142,23 @@ async def run_extraction(
                             continue
                         seen_qty_keys.add(qty_key)
 
-                        from_tank = qty_dict.get("from_tank") or tank_location
+                        explicit_from_tank = qty_dict.get("from_tank")
+                        if qty_type == "retained":
+                            retained_seen_count += 1
+                            if explicit_from_tank:
+                                from_tank = explicit_from_tank
+                            elif retained_seen_count > 1 and transfer_to_tank:
+                                from_tank = transfer_to_tank
+                                logger.info(
+                                    f"Retained quantity #{retained_seen_count} in entry had no "
+                                    f"explicit from_tank -- attributing to transfer destination "
+                                    f"tank {transfer_to_tank!r} instead of source tank_location "
+                                    f"{tank_location!r}. date={entry_date}"
+                                )
+                            else:
+                                from_tank = tank_location
+                        else:
+                            from_tank = explicit_from_tank or tank_location
                         to_tank = None if qty_type == "retained" else qty_dict.get("to_tank")
 
                         qty = OrbEntryQuantity(
