@@ -71,11 +71,12 @@ async def get_vessel_daily_log(
     _: User = Depends(get_current_user),
 ):
     result = await db.execute(select(Vessel).where(Vessel.id == vessel_id))
-    if not result.scalar_one_or_none():
+    vessel = result.scalar_one_or_none()
+    if not vessel:
         raise HTTPException(status_code=404, detail="Vessel not found")
 
     from app.services.daily_log import build_daily_log_by_date
-    log_data = await build_daily_log_by_date(vessel_id, date_from, date_to, db)
+    log_data = await build_daily_log_by_date(vessel_id, vessel.name, date_from, date_to, db)
     return success(data=log_data)
 
 

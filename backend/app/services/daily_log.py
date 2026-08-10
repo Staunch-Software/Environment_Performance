@@ -4,11 +4,13 @@ import uuid
 from collections import defaultdict
 from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.models.orb_entry import OrbEntry
 from app.models.orb_entry_quantity import OrbEntryQuantity
 from app.models.vessel_tank import VesselTank
+from app.models.fuel_consumption import FuelConsumption
+from app.models.vessel import Vessel
 
 
 # ── Tank name matching ──────────────────────────────────────────────────────
@@ -204,7 +206,28 @@ async def _load_tanks(vessel_id: uuid.UUID, db: AsyncSession):
     return result.scalars().all()
 
 
-async def _build_log_core(tanks, entries, db: AsyncSession) -> dict:
+async def _load_fuel_consumption(
+    vessel_name: str, date_from: date | None, date_to: date | None, db: AsyncSession
+) -> dict[date, float]:
+    """Daily fuel totals scraped from WNI/MariApps, keyed by report_date."""
+    if not vessel_name or not date_from or not date_to:
+        return {}
+    result = await db.execute(
+        select(FuelConsumption.report_date, FuelConsumption.total_fuel_consumption).where(
+            FuelConsumption.vessel_name == vessel_name,
+            FuelConsumption.report_date >= date_from,
+            FuelConsumption.report_date <= date_to,
+        )
+    )
+    return {row.report_date: row.total_fuel_consumption for row in result.all()}
+
+
+async def _build_log_core(
+    tanks, entries, db: AsyncSession,
+    vessel_name: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> dict:
     """Shared computation — takes pre-loaded tanks and entries."""
 
     entry_ids = [e.id for e in entries]
@@ -220,6 +243,14 @@ async def _build_log_core(tanks, entries, db: AsyncSession) -> dict:
     by_date: dict[date, list] = defaultdict(list)
     for entry in entries:
         by_date[entry.entry_date].append(entry)
+
+    # Fuel consumption is scraped independently of ORB entries, so fall back to
+    # the entries' own date span when no explicit range was given (legacy
+    # upload-scoped callers) — otherwise a vessel with fuel data but no ORB
+    # entries yet would just show zero either way.
+    fuel_from = date_from or (min(by_date.keys()) if by_date else None)
+    fuel_to = date_to or (max(by_date.keys()) if by_date else None)
+    fuel_map = await _load_fuel_consumption(vessel_name, fuel_from, fuel_to, db)
 
     # ── Build daily rows ──────────────────────────────────────────────────────
     daily_rows = []
@@ -319,6 +350,7 @@ async def _build_log_core(tanks, entries, db: AsyncSession) -> dict:
             "equipment_failure":      equipment_failure,
             "bunker_qty":             bunker_qty,
             "bunker_grade":           bunker_grade,
+            "fuel_consumed":          fuel_map.get(day, 0.0),
         })
 
     # ── Monthly summary ────────────────────────────────────────────────────────
@@ -349,12 +381,16 @@ async def _build_log_core(tanks, entries, db: AsyncSession) -> dict:
         "equipment_failure":      sum(r["equipment_failure"] for r in daily_rows),
         "bunker_qty":             sum_events(daily_rows, "bunker_qty"),
         "bunker_grade":           "—",
+        # Scraped fuel consumption (WNI/MariApps) — independent of ORB entries,
+        # summed over fuel_map directly so it's populated even for a range with
+        # fuel data but no ORB entries yet.
+        "fuel_consumed":          round(sum(fuel_map.values()), 3),
     }
 
-    bunker_total = summary["bunker_qty"]
     sludge_total = summary["total_sludge_retention"]
+    fuel_total = summary["fuel_consumed"]
     summary["sludge_accumulation_ratio"] = (
-        round((sludge_total / bunker_total) * 100, 3) if bunker_total > 0 else 0.0
+        round((sludge_total / fuel_total) * 100, 3) if fuel_total > 0 else 0.0
     )
 
     tank_capacities = {t.tank_name: t.capacity_m3 for t in tanks}
@@ -370,17 +406,19 @@ async def _build_log_core(tanks, entries, db: AsyncSession) -> dict:
 
 async def build_daily_log(vessel_id: uuid.UUID, upload_id: uuid.UUID, db: AsyncSession) -> dict:
     """Legacy: filter by upload_id (used by upload-detail endpoint)."""
-    from datetime import date as date_type
     tanks = await _load_tanks(vessel_id, db)
     entries_result = await db.execute(
         select(OrbEntry).where(OrbEntry.upload_id == upload_id).order_by(OrbEntry.entry_date)
     )
     entries = entries_result.scalars().all()
-    return await _build_log_core(tanks, entries, db)
+    vessel = (await db.execute(select(Vessel).where(Vessel.id == vessel_id))).scalar_one_or_none()
+    vessel_name = vessel.name if vessel else None
+    return await _build_log_core(tanks, entries, db, vessel_name=vessel_name)
 
 
 async def build_daily_log_by_date(
     vessel_id: uuid.UUID,
+    vessel_name: str,
     date_from,
     date_to,
     db: AsyncSession,
@@ -395,4 +433,4 @@ async def build_daily_log_by_date(
     q = q.order_by(OrbEntry.entry_date)
     entries_result = await db.execute(q)
     entries = entries_result.scalars().all()
-    return await _build_log_core(tanks, entries, db)
+    return await _build_log_core(tanks, entries, db, vessel_name=vessel_name, date_from=date_from, date_to=date_to)
