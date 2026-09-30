@@ -4,7 +4,7 @@ import { SidebarProvider } from './context/SidebarContext';
 import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/Layout/ProtectedRoute';
 
-import Login from './pages/Login';
+import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard';
 import Vessels from './pages/Vessels';
 import Uploads from './pages/Uploads';
