@@ -4,6 +4,7 @@ import uuid
 import json
 import base64
 import logging
+import asyncio
 from datetime import date, timedelta
 from typing import Any
 
@@ -20,6 +21,12 @@ from app.models.vessel import Vessel
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Bounds how many extract_with_gemini() runs may hold their converted PDF
+# pages in memory at once (see config.MAX_CONCURRENT_EXTRACTIONS). Module
+# level and created once, so every background task sharing this worker
+# process contends for the same slots.
+_EXTRACTION_SEMAPHORE = asyncio.Semaphore(settings.MAX_CONCURRENT_EXTRACTIONS)
 
 import ssl
 import certifi
@@ -3833,10 +3840,19 @@ async def run_extraction(
                 entries_data = get_mock_data(vessel_id, upload_id)
             else:
                 try:
-                    entries_data, failed_pages = await extract_with_gemini(
-                        storage_path, upload_id=upload_id, session_factory=session_factory,
-                        expected_vessel_name=vessel.name if vessel else None,
-                    )
+                    # Serialize the actual page-conversion + extraction work
+                    # across concurrent uploads -- each run holds every page
+                    # of the PDF in memory for the whole job, and two large
+                    # PDFs processed at once in the same worker have driven
+                    # RSS into the multi-GB range and triggered an OOM kill
+                    # in production. Queuing here doesn't block the request
+                    # that queued the background task, only other extraction
+                    # jobs waiting for their turn.
+                    async with _EXTRACTION_SEMAPHORE:
+                        entries_data, failed_pages = await extract_with_gemini(
+                            storage_path, upload_id=upload_id, session_factory=session_factory,
+                            expected_vessel_name=vessel.name if vessel else None,
+                        )
                 except VesselMismatchError as e:
                     logger.warning(f"Upload {upload_id} rejected: {e}")
                     upload.status = "failed"
