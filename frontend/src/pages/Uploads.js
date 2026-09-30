@@ -43,7 +43,7 @@ export default function Uploads() {
           if (prev && (prev === 'pending' || prev === 'processing') && u.status === 'completed') {
             toast({ message: `Extraction complete — ${u.extracted_entries_count} entries found from ${u.original_filename}`, type: 'success' });
           }
-          if (prev && (prev === 'pending' || prev === 'processing') && u.status === 'error') {
+          if (prev && (prev === 'pending' || prev === 'processing') && u.status === 'failed') {
             toast({ message: `Extraction failed for ${u.original_filename}`, type: 'error' });
           }
           prevStatusRef.current[u.id] = u.status;
@@ -151,7 +151,7 @@ export default function Uploads() {
                 display: 'inline-block',
                 animation: 'pulse-dot 1.2s ease-in-out infinite',
               }} />
-              Extracting
+              Extracting{r.total_pages ? ` (${r.pages_processed || 0}/${r.total_pages} pages)` : ''}
             </span>
           )}
         </span>
