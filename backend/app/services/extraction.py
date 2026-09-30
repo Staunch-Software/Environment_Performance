@@ -5,7 +5,7 @@ import json
 import base64
 import logging
 import asyncio
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -1587,6 +1587,12 @@ async def _write_progress(
                 return
             for key, value in fields.items():
                 setattr(upload, key, value)
+            # Set explicitly rather than relying on the column's onupdate:
+            # when a call's only field happens to match the value already
+            # loaded (e.g. the first call's pages_processed=0 matching the
+            # column default), SQLAlchemy sees no dirty attributes and skips
+            # the UPDATE entirely, silently skipping onupdate along with it.
+            upload.updated_at = datetime.now(timezone.utc)
             await db.commit()
     except Exception as e:
         logger.warning(f"Progress heartbeat write failed for upload {upload_id}: {e}")
@@ -3830,6 +3836,7 @@ async def run_extraction(
                 return
 
             upload.status = "processing"
+            upload.updated_at = datetime.now(timezone.utc)
             await db.commit()
 
             vessel_result = await db.execute(sa_select(Vessel).where(Vessel.id == vessel_id))
@@ -3857,6 +3864,7 @@ async def run_extraction(
                     logger.warning(f"Upload {upload_id} rejected: {e}")
                     upload.status = "failed"
                     upload.error_message = str(e)
+                    upload.updated_at = datetime.now(timezone.utc)
                     await db.commit()
                     return
 
@@ -4256,6 +4264,7 @@ async def run_extraction(
             if duplicate_count:
                 msg_parts.append(f"{duplicate_count} duplicate {'entry' if duplicate_count == 1 else 'entries'} skipped")
             upload.error_message = "; ".join(msg_parts) if msg_parts else None
+            upload.updated_at = datetime.now(timezone.utc)
             await db.commit()
 
             # Run compliance checks
@@ -4273,6 +4282,7 @@ async def run_extraction(
                 if upload:
                     upload.status = "failed"
                     upload.error_message = str(e)
+                    upload.updated_at = datetime.now(timezone.utc)
                     await db.commit()
             except Exception:
                 pass
