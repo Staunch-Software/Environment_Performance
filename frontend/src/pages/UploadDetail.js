@@ -175,10 +175,10 @@ export default function UploadDetail() {
                 const STEPS = ['Uploaded', 'Processing', 'Extracted', 'Completed'];
                 const stepIndex = upload.status === 'pending' ? 0
                   : upload.status === 'processing' ? 1
-                  : upload.status === 'error' ? 1
+                  : upload.status === 'failed' ? 1
                   : upload.extracted_entries_count > 0 ? 2 : 1;
                 const activeIndex = upload.status === 'completed' ? 3 : stepIndex;
-                const isError = upload.status === 'error';
+                const isError = upload.status === 'failed';
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1.5rem', gap: 0 }}>
                     {STEPS.map((step, i) => {
@@ -236,6 +236,11 @@ export default function UploadDetail() {
                   </p>
                   <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
                     <Badge value={upload.status} />
+                    {upload.status === 'processing' && upload.total_pages > 0 && (
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        Page {upload.pages_processed || 0} of {upload.total_pages}
+                      </span>
+                    )}
                     <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                       {upload.extracted_entries_count} entries extracted
                     </span>

@@ -16,6 +16,7 @@ class UploadResponse(BaseModel):
     status: str
     error_message: Optional[str] = None
     total_pages: Optional[int] = None
+    pages_processed: Optional[int] = None
     extracted_entries_count: Optional[int] = 0
     duplicate_entries_skipped: int = 0
     created_at: datetime

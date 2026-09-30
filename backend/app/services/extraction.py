@@ -1873,14 +1873,22 @@ async def extract_with_gemini(
         # Raising the source DPI keeps each split half close to what a
         # genuinely single-photographed page already gets, which is the
         # scan format that already extracts reliably today.
+        # Run via a worker thread -- convert_from_path shells out to Poppler
+        # and blocks synchronously for the whole PDF, which previously ran
+        # directly on the event loop. For multi-page scans this could block
+        # long enough to miss the gunicorn worker heartbeat, causing the
+        # worker to be killed mid-extraction with the upload stuck at
+        # "processing" forever (no exception, nothing logged).
         if poppler_path:
-            pages = convert_from_path(
+            pages = await asyncio.to_thread(
+                convert_from_path,
                 storage_path,
                 dpi=300,
                 poppler_path=poppler_path,
             )
         else:
-            pages = convert_from_path(
+            pages = await asyncio.to_thread(
+                convert_from_path,
                 storage_path,
                 dpi=300,
             )
