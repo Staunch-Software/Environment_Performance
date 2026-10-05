@@ -285,6 +285,7 @@
   /* tank table becomes stacked cards */
   .vc-table-wrap { border: none; background: transparent; overflow: visible; }
   .vc-table thead { display: none; }
+  .vc-table { min-width: 0; } /* global `table { min-width: 580px/480px }` was forcing the stacked cards wider than the screen */
   .vc-table, .vc-table tbody, .vc-table tr, .vc-table td { display: block; width: 100%; box-sizing: border-box; }
   .vc-table tr.vc-group {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
@@ -308,6 +309,22 @@
   .vc-table tr.vc-row td.vc-td-actions::before { content: none; }
   .vc-rowbtns { display: flex; width: 100%; }
   .vc-rowbtns .vc-btn { flex: 1; }
+
+  /* fit the viewport: stack header, let every flex child shrink, wrap long text */
+  .vc, .vc-vessel, .vc-vessel__body { min-width: 0; max-width: 100%; box-sizing: border-box; }
+  .vc-header { flex-direction: column; align-items: stretch; }
+  .vc-header__meta { width: 100%; justify-content: space-between; }
+  .vc-header__meta .vc-btn { flex: 1 1 auto; }
+  .vc-summary__item { flex: 1 1 160px; min-width: 0; }
+  .vc-vessel__actions { flex-wrap: wrap; row-gap: 0.45rem; }
+  .vc-chip { max-width: 100%; overflow-wrap: anywhere; }
+  .vc-table tr.vc-row td { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+  .vc-table tr.vc-row td::before { flex-shrink: 0; }
+  .vc-table tr.vc-row td .vc-pill, .vc-table tr.vc-row td .badge, .vc-table tr.vc-row td .vc-code { flex-shrink: 0; white-space: nowrap; }
+  .vc-table tr.vc-group td { min-width: 0; overflow-wrap: anywhere; }
+  .vc-table tr.vc-row td.vc-td-actions { white-space: normal; }
+  .vc-rowbtns { flex-wrap: nowrap; }
+  .vc-rowbtns .vc-btn { min-width: 0; white-space: nowrap; }
 }
 
 @media (max-width: 480px) {
@@ -316,6 +333,14 @@
   .vc-vessel { border-radius: 14px; }
   .vc-vessel__icon { width: 32px; height: 32px; border-radius: 9px; }
   .vc-summary__item { flex: 1 1 100%; }
+  .vc-header__meta { flex-direction: column; align-items: stretch; }
+  .vc-header__meta .vc-meta-chip { justify-content: center; }
+  .vc-vessel__head { padding: 0.65rem 0.8rem; }
+  .vc-vessel__body { padding: 0.8rem 0.8rem 1rem; }
+  .vc-vessel__actions .vc-btn { flex: 1 1 auto; }
+  .vc-table tr.vc-row { padding: 0.75rem 0.8rem; }
+  .vc-rowbtns { gap: 0.4rem; }
+  .vc-rowbtns .vc-btn { padding: 0.45rem 0.5rem; }
   .vc .modal-footer .vc-btn { flex: 1; }
   .vc-docframe { height: 55vh; }
 }

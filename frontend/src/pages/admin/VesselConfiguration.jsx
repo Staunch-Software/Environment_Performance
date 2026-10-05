@@ -32,7 +32,12 @@ export default function VesselConfiguration() {
 
   const loadVessels = () => {
     setLoading(true);
-    api.get('/api/vessels').then(r => setVessels(r.data.data || [])).finally(() => setLoading(false));
+    api.get('/api/vessels').then(r => {
+      const list = r.data.data || [];
+      setVessels(list);
+      // Prefetch tanks so the collapsed header can show the tank count right away.
+      list.filter(v => !tanks[v.id]).forEach(v => { loadTanks(v.id).catch(() => {}); });
+    }).finally(() => setLoading(false));
   };
 
   useEffect(() => { loadVessels(); }, []);

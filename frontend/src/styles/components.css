@@ -813,15 +813,15 @@ tbody td { padding: 0.7rem 1rem; font-size: 0.875rem; vertical-align: middle; }
   /* ── Badges ── */
   .badge { font-size: 0.7rem; padding: 0.15rem 0.5rem; }
 
-  /* ── Modal → bottom sheet ── */
-  .modal-overlay { align-items: flex-end; padding: 0; }
+  /* ── Modal → stays centered, width capped ── */
+  .modal-overlay { align-items: center; justify-content: center; padding: 1rem; }
   .modal {
-    width: 100%;
+    width: min(520px, 90vw);
     max-width: 100%;
-    border-radius: var(--radius) var(--radius) 0 0;
     max-height: 90vh;
-    animation: slideUpSheet 0.25s ease;
   }
+  .modal--wide { width: min(900px, 95vw); }
+  .modal--xwide { width: min(1400px, 96vw); }
   .modal-header { padding: 1rem 1.25rem; }
   .modal-header h2 { font-size: 1rem; }
   .modal-body { padding: 1.25rem; }
