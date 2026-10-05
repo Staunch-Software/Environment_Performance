@@ -1,5 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <circle cx="32" cy="32" r="32" fill="#1F4E79"/>
+  <defs>
+    <linearGradient id="orb-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F58A3C"/>
+      <stop offset="1" stop-color="#CC5A0A"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="32" fill="url(#orb-bg)"/>
   <g fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="32" cy="16" r="5"/>
     <line x1="32" y1="21" x2="32" y2="46"/>

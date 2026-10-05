@@ -41,8 +41,20 @@ export default function Sidebar() {
 
       <aside className={`sidebar${isOpen ? ' open' : ''}`}>
         <div className="sidebar-logo">
-          ORB Platform
-          <span>MARPOL Compliance</span>
+          <div className="sidebar-logo__mark" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="32" cy="16" r="5" />
+              <line x1="32" y1="21" x2="32" y2="46" />
+              <line x1="20" y1="28" x2="44" y2="28" />
+              <path d="M16 38 a16 16 0 0 0 32 0" />
+              <line x1="16" y1="38" x2="16" y2="33" />
+              <line x1="48" y1="38" x2="48" y2="33" />
+            </svg>
+          </div>
+          <div className="sidebar-logo__text">
+            <span className="sidebar-logo__name">ORB Platform</span>
+            <span className="sidebar-logo__tag">MARPOL Compliance</span>
+          </div>
         </div>
         <nav className="sidebar-nav">
           <div className="sidebar-section">Main</div>
@@ -56,18 +68,7 @@ export default function Sidebar() {
               <Icon size={18} className="sidebar-icon" />
               {label}
               {label === 'Alerts' && alertCount > 0 && (
-                <span style={{
-                  marginLeft: 'auto',
-                  background: '#ef4444',
-                  color: '#fff',
-                  fontSize: '0.68rem',
-                  fontWeight: 700,
-                  borderRadius: '999px',
-                  padding: '1px 7px',
-                  minWidth: '18px',
-                  textAlign: 'center',
-                  lineHeight: '18px',
-                }}>
+                <span className="sidebar-badge">
                   {alertCount > 99 ? '99+' : alertCount}
                 </span>
               )}

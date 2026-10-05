@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, CalendarDays, BarChart3, ClipboardList } from 'lucide-react';
 import Sidebar from '../components/Layout/Sidebar';
 import Header from '../components/Layout/Header';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import Dropdown from '../components/shared/Dropdown';
 import api from '../api/axios';
+import './DailyLog.css';
 
 const DAILY_COLS = [
   { key: 'date',                   label: 'Date',                          isArray: false },
@@ -43,17 +44,17 @@ function pctBand(pct) {
 }
 
 function TankCell({ items, capacities = {} }) {
-  if (!items || items.length === 0) return <span className="text-muted">—</span>;
+  if (!items || items.length === 0) return <span className="dl-muted">—</span>;
   return (
-    <div className="tank-cell">
+    <div className="dl-tank">
       {items.map((item, i) => {
         const cap = capacities[item.tank_name];
         const pct = cap ? Math.round((item.value / cap) * 100) : null;
         return (
-          <div key={i} className="tank-cell__row">
-            <span className="tank-cell__name">{item.tank_name}</span>
-            <span className="tank-cell__value">{item.value} m³</span>
-            {pct !== null && <span className={`tank-cell__pct tank-cell__pct--${pctBand(pct)}`}>{pct}%</span>}
+          <div key={i} className="dl-tank__row">
+            <span className="dl-tank__name">{item.tank_name}</span>
+            <span className="dl-tank__value">{item.value} m³</span>
+            {pct !== null && <span className={`dl-tank__pct dl-tank__pct--${pctBand(pct)}`}>{pct}%</span>}
           </div>
         );
       })}
@@ -64,13 +65,13 @@ function TankCell({ items, capacities = {} }) {
 function renderDailyCell(col, row, capacities) {
   if (col.key === 'total_sludge_retention') {
     const items = row[col.key];
-    if (!items || items.length === 0) return <span className="text-muted">—</span>;
+    if (!items || items.length === 0) return <span className="dl-muted">—</span>;
     const total = items.reduce((s, i) => s + i.value, 0);
-    return <span className="tank-cell__value">{Math.round(total * 1000) / 1000} m³</span>;
+    return <span className="dl-tank__value">{Math.round(total * 1000) / 1000} m³</span>;
   }
   if (!col.isArray) {
     const val = row[col.key];
-    if (val === null || val === undefined || val === '' || val === 0) return <span className="text-muted">—</span>;
+    if (val === null || val === undefined || val === '' || val === 0) return <span className="dl-muted">—</span>;
     return val;
   }
   return <TankCell items={row[col.key]} capacities={capacities} />;
@@ -81,17 +82,19 @@ const MONTH_LABEL = (date) =>
 
 function ModeToggle({ mode, onChange }) {
   return (
-    <div className="month-filter-toggle">
+    <div className="dl-seg" role="group" aria-label="Filter mode">
       <button
         type="button"
-        className={`month-filter-toggle__btn${mode === 'month' ? ' month-filter-toggle__btn--active' : ''}`}
+        className={`dl-seg__btn${mode === 'month' ? ' dl-seg__btn--active' : ''}`}
+        aria-pressed={mode === 'month'}
         onClick={() => onChange('month')}
       >
         Month
       </button>
       <button
         type="button"
-        className={`month-filter-toggle__btn${mode === 'custom' ? ' month-filter-toggle__btn--active' : ''}`}
+        className={`dl-seg__btn${mode === 'custom' ? ' dl-seg__btn--active' : ''}`}
+        aria-pressed={mode === 'custom'}
         onClick={() => onChange('custom')}
       >
         Custom Range
@@ -103,12 +106,12 @@ function ModeToggle({ mode, onChange }) {
 function MonthStepper({ date, onChange, disabled }) {
   const shift = (delta) => onChange(new Date(date.getFullYear(), date.getMonth() + delta, 1));
   return (
-    <div className="month-stepper" style={{ opacity: disabled ? 0.5 : 1 }}>
-      <button type="button" className="month-stepper__arrow" disabled={disabled} onClick={() => shift(-1)} aria-label="Previous month">
+    <div className={`dl-stepper${disabled ? ' dl-stepper--disabled' : ''}`}>
+      <button type="button" className="dl-stepper__arrow" disabled={disabled} onClick={() => shift(-1)} aria-label="Previous month">
         <ChevronLeft size={16} />
       </button>
-      <span className="month-stepper__label">{MONTH_LABEL(date)}</span>
-      <button type="button" className="month-stepper__arrow" disabled={disabled} onClick={() => shift(1)} aria-label="Next month">
+      <span className="dl-stepper__label">{MONTH_LABEL(date)}</span>
+      <button type="button" className="dl-stepper__arrow" disabled={disabled} onClick={() => shift(1)} aria-label="Next month">
         <ChevronRight size={16} />
       </button>
     </div>
@@ -222,16 +225,23 @@ export default function DailyLog() {
       <div className="main-content">
         <Header title="Daily Log" />
 
-        <div className="daily-log-shell">
-          <div className="daily-log-body">
+        <div className="dl-shell">
+          <div className="dl">
             {/* ── Table 1: Daily Log ── */}
-            <div className="card">
-              <div className="page-header">
-                <h3>Daily Log</h3>
+            <section className="dl-card">
+              <div className="dl-card__head">
+                <span className="dl-card__icon"><ClipboardList size={18} /></span>
+                <div className="dl-card__titles">
+                  <h3 className="dl-card__title">Daily Log</h3>
+                  <p className="dl-card__sub">Day-by-day tank retention, discharges and bunkering.</p>
+                </div>
+                {logData && logData.daily_rows.length > 0 && (
+                  <span className="dl-card__meta">{logData.daily_rows.length} {logData.daily_rows.length === 1 ? 'day' : 'days'}</span>
+                )}
               </div>
 
               {/* Daily filters */}
-              <div className="filters-bar">
+              <div className="dl-filters">
                 <div className="form-group">
                   <label>Vessel</label>
                   <Dropdown
@@ -260,26 +270,25 @@ export default function DailyLog() {
                   />
                 </div>
                 <button
-                  className="btn btn-primary"
+                  className="dl-btn dl-btn--primary"
                   onClick={() => loadDailyLog()}
                   disabled={!dailyVessel || loading}
-                  style={{ width: 160, justifyContent: 'center' }}
                 >
                   <Search size={14} />
                   {loading ? 'Loading…' : 'Load Log'}
                 </button>
               </div>
 
-              {error && <div className="alert-banner error">{error}</div>}
+              {error && <div className="alert-banner error dl-alert">{error}</div>}
               {loading && <LoadingSpinner />}
 
               {!loading && logData && logData.daily_rows.length === 0 && (
-                <div className="daily-log-empty">No entries found for the selected date range.</div>
+                <div className="dl-empty">No entries found for the selected date range.</div>
               )}
 
               {!loading && logData && logData.daily_rows.length > 0 && (
-                <div className="daily-log-table-wrap">
-                  <table className="daily-log-table">
+                <div className="dl-tablewrap">
+                  <table className="dl-table">
                     <thead>
                       <tr>
                         {DAILY_COLS.map(c => (
@@ -308,19 +317,26 @@ export default function DailyLog() {
               )}
 
               {!loading && !logData && (
-                <div className="daily-log-empty">Select a vessel and date range, then click Load Log.</div>
+                <div className="dl-empty">Select a vessel and date range, then click Load Log.</div>
               )}
 
-            </div>
+            </section>
 
             {/* ── Table 2: Monthly / Custom Date Summary ── */}
-            <div className="card">
-              <div className="page-header">
-                <h3>Monthly or Custom Date Selection Log</h3>
+            <section className="dl-card">
+              <div className="dl-card__head">
+                <span className="dl-card__icon"><BarChart3 size={18} /></span>
+                <div className="dl-card__titles">
+                  <h3 className="dl-card__title">Monthly or Custom Date Selection Log</h3>
+                  <p className="dl-card__sub">Consolidated sludge, bilge and fuel totals for a month or custom period.</p>
+                </div>
+                {summaryData && (
+                  <span className="dl-card__meta"><CalendarDays size={13} /> {summaryMode === 'month' ? MONTH_LABEL(summaryMonth) : 'Custom range'}</span>
+                )}
               </div>
 
               {/* Summary filters (independent) */}
-              <div className="filters-bar">
+              <div className="dl-filters dl-filters--summary">
                 <div className="form-group">
                   <label>Vessel</label>
                   <Dropdown
@@ -359,22 +375,21 @@ export default function DailyLog() {
                   />
                 </div>
                 <button
-                  className="btn btn-primary"
+                  className="dl-btn dl-btn--primary"
                   onClick={() => loadSummary()}
                   disabled={!summaryVessel || summaryLoading}
-                  style={{ width: 160, justifyContent: 'center' }}
                 >
                   <Search size={14} />
                   {summaryLoading ? 'Loading…' : 'Load Summary'}
                 </button>
               </div>
 
-              {summaryError && <div className="alert-banner error">{summaryError}</div>}
+              {summaryError && <div className="alert-banner error dl-alert">{summaryError}</div>}
               {summaryLoading && <LoadingSpinner />}
 
               {!summaryLoading && summaryData && (
-                <div className="monthly-table-wrap">
-                  <table className="monthly-table">
+                <div className="dl-tablewrap dl-tablewrap--summary">
+                  <table className="dl-table dl-table--summary">
                     <thead>
                       <tr>
                         {SUMMARY_COLS.map(c => <th key={c.key}>{c.label}</th>)}
@@ -386,7 +401,7 @@ export default function DailyLog() {
                           const val = summaryData[c.key];
                           return (
                             <td key={c.key}>
-                              {val === null || val === undefined || val === 0 ? '—' : val}
+                              {val === null || val === undefined || val === 0 ? <span className="dl-muted">—</span> : val}
                             </td>
                           );
                         })}
@@ -398,9 +413,9 @@ export default function DailyLog() {
 
               {!summaryLoading && !summaryData && (
 
-                <div className="daily-log-empty">Select a date range and click Load Summary.</div>
+                <div className="dl-empty">Select a date range and click Load Summary.</div>
               )}
-            </div>
+            </section>
           </div>
         </div>
       </div>
