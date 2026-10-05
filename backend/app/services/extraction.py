@@ -4,7 +4,8 @@ import uuid
 import json
 import base64
 import logging
-from datetime import date, timedelta
+import asyncio
+from datetime import date, timedelta, datetime, timezone
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -20,6 +21,12 @@ from app.models.vessel import Vessel
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Bounds how many extract_with_gemini() runs may hold their converted PDF
+# pages in memory at once (see config.MAX_CONCURRENT_EXTRACTIONS). Module
+# level and created once, so every background task sharing this worker
+# process contends for the same slots.
+_EXTRACTION_SEMAPHORE = asyncio.Semaphore(settings.MAX_CONCURRENT_EXTRACTIONS)
 
 import ssl
 import certifi
@@ -1580,6 +1587,12 @@ async def _write_progress(
                 return
             for key, value in fields.items():
                 setattr(upload, key, value)
+            # Set explicitly rather than relying on the column's onupdate:
+            # when a call's only field happens to match the value already
+            # loaded (e.g. the first call's pages_processed=0 matching the
+            # column default), SQLAlchemy sees no dirty attributes and skips
+            # the UPDATE entirely, silently skipping onupdate along with it.
+            upload.updated_at = datetime.now(timezone.utc)
             await db.commit()
     except Exception as e:
         logger.warning(f"Progress heartbeat write failed for upload {upload_id}: {e}")
@@ -3823,6 +3836,7 @@ async def run_extraction(
                 return
 
             upload.status = "processing"
+            upload.updated_at = datetime.now(timezone.utc)
             await db.commit()
 
             vessel_result = await db.execute(sa_select(Vessel).where(Vessel.id == vessel_id))
@@ -3833,14 +3847,24 @@ async def run_extraction(
                 entries_data = get_mock_data(vessel_id, upload_id)
             else:
                 try:
-                    entries_data, failed_pages = await extract_with_gemini(
-                        storage_path, upload_id=upload_id, session_factory=session_factory,
-                        expected_vessel_name=vessel.name if vessel else None,
-                    )
+                    # Serialize the actual page-conversion + extraction work
+                    # across concurrent uploads -- each run holds every page
+                    # of the PDF in memory for the whole job, and two large
+                    # PDFs processed at once in the same worker have driven
+                    # RSS into the multi-GB range and triggered an OOM kill
+                    # in production. Queuing here doesn't block the request
+                    # that queued the background task, only other extraction
+                    # jobs waiting for their turn.
+                    async with _EXTRACTION_SEMAPHORE:
+                        entries_data, failed_pages = await extract_with_gemini(
+                            storage_path, upload_id=upload_id, session_factory=session_factory,
+                            expected_vessel_name=vessel.name if vessel else None,
+                        )
                 except VesselMismatchError as e:
                     logger.warning(f"Upload {upload_id} rejected: {e}")
                     upload.status = "failed"
                     upload.error_message = str(e)
+                    upload.updated_at = datetime.now(timezone.utc)
                     await db.commit()
                     return
 
@@ -4240,6 +4264,7 @@ async def run_extraction(
             if duplicate_count:
                 msg_parts.append(f"{duplicate_count} duplicate {'entry' if duplicate_count == 1 else 'entries'} skipped")
             upload.error_message = "; ".join(msg_parts) if msg_parts else None
+            upload.updated_at = datetime.now(timezone.utc)
             await db.commit()
 
             # Run compliance checks
@@ -4257,6 +4282,7 @@ async def run_extraction(
                 if upload:
                     upload.status = "failed"
                     upload.error_message = str(e)
+                    upload.updated_at = datetime.now(timezone.utc)
                     await db.commit()
             except Exception:
                 pass

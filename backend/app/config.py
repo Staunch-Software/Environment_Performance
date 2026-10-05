@@ -62,6 +62,16 @@ class Settings(BaseSettings):
     # the extraction logic itself.
     EXTRACTION_DEBUG_DIR: str = ""
 
+    # Max number of ORB PDF extractions allowed to run concurrently across the
+    # whole process. convert_from_path() loads every page of a PDF into memory
+    # at once and holds it for the entire job (which can run many minutes), so
+    # two large multi-page uploads landing close together in the same worker
+    # can push resident memory into the multi-GB range and trigger an OOM kill
+    # (confirmed in production: a single worker hit ~9GB RSS processing two
+    # concurrent uploads and was killed by the kernel). Keep this at 1 unless
+    # the VM has memory headroom to spare.
+    MAX_CONCURRENT_EXTRACTIONS: int = 1
+
 
 @lru_cache
 def get_settings() -> Settings:
